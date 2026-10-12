@@ -2,7 +2,8 @@ import { ListChecks } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation } from "react-router";
 import { OperationTray } from "../components/OperationTray";
-import { APP_ICON as AppIcon, NAV_ITEMS } from "./navigation";
+import logoUrl from "../assets/logo.png";
+import { NAV_ITEMS } from "./navigation";
 import { isActive, needsRecovery, useOperations } from "./operations";
 
 const TRAY_ID = "operation-tray";
@@ -40,7 +41,7 @@ export function AppShell() {
       </a>
       <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-surface-raised px-4">
         <div className="flex items-center gap-2 font-semibold">
-          <AppIcon aria-hidden className="size-5 text-accent" />
+          <img src={logoUrl} alt="" className="size-5" />
           Devluma
         </div>
         <button

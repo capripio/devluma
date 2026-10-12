@@ -1,5 +1,4 @@
 import {
-  Activity,
   Database,
   FileText,
   FolderGit2,
@@ -32,5 +31,3 @@ export const NAV_ITEMS: NavItem[] = [
   { path: "/logs", label: "Logs & Diagnostics", icon: ScrollText },
   { path: "/settings", label: "Settings", icon: Settings },
 ];
-
-export const APP_ICON = Activity;
