@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-ngrok-status"
+description = "Enables the get_ngrok_status command without any pre-configured scope."
+commands.allow = ["get_ngrok_status"]
+
+[[permission]]
+identifier = "deny-get-ngrok-status"
+description = "Denies the get_ngrok_status command without any pre-configured scope."
+commands.deny = ["get_ngrok_status"]

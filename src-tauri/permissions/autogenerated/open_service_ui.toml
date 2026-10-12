@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-open-service-ui"
+description = "Enables the open_service_ui command without any pre-configured scope."
+commands.allow = ["open_service_ui"]
+
+[[permission]]
+identifier = "deny-open-service-ui"
+description = "Denies the open_service_ui command without any pre-configured scope."
+commands.deny = ["open_service_ui"]

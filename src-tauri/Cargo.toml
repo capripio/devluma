@@ -1,0 +1,51 @@
+[package]
+name = "devluma"
+version = "0.1.0"
+description = "Windows-first local development environment manager"
+authors = ["Muhammad Asif"]
+license = "GPL-3.0-only"
+repository = "https://github.com/capripio/devluma"
+edition = "2024"
+rust-version = "1.90"
+# The app; `devluma-elevate` is the separate privilege helper (ADR 0007).
+default-run = "devluma"
+
+[lib]
+name = "devluma_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7.2", features = [] }
+
+[dependencies]
+serde_json = "1.0"
+serde = { version = "1.0", features = ["derive"] }
+tauri = { version = "2.12.3", features = [] }
+rusqlite = { version = "0.40.2", features = ["bundled"] }
+ulid = "3.0.0"
+thiserror = "2.0.21"
+sha2 = "0.11.0"
+hex = "0.4.3"
+regex = "1.13.1"
+chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"] }
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls", "stream"] }
+zip = { version = "9.0.1", default-features = false, features = ["deflate"] }
+tokio = { version = "1.53.2", features = ["time", "sync", "fs", "macros", "rt"] }
+tokio-util = "0.7.20"
+url = "2.5.8"
+windows = { version = "0.62.2", features = ["Win32_Storage_FileSystem", "Win32_Foundation", "Win32_Security", "Win32_System_JobObjects", "Win32_System_Threading", "Win32_System_Diagnostics_ToolHelp", "Win32_NetworkManagement_IpHelper", "Win32_Networking_WinSock", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging", "Win32_System_SystemInformation", "Win32_Security_Authorization", "Win32_Security_Cryptography", "Win32_Security_Credentials", "Win32_System_Memory"] }
+similar = "3.2.0"
+rcgen = { version = "0.14.10", default-features = false, features = ["pem", "x509-parser", "aws_lc_rs"] }
+time = "0.3.55"
+sha1 = "0.11.0"
+tauri-plugin-updater = "2.13.3"
+minisign-verify = "0.2.5"
+base64 = "0.22.1"
+
+[dev-dependencies]
+rustls-pki-types = { version = "1", features = ["std"] }
+tauri = { version = "2.12.3", features = ["test"] }
+tempfile = "3.27.0"
+tiny_http = "0.12.0"
+tokio = { version = "1.53.2", features = ["rt-multi-thread", "macros", "time"] }
+webpki = { version = "0.103", package = "rustls-webpki" }

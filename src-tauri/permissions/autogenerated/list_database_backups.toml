@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-database-backups"
+description = "Enables the list_database_backups command without any pre-configured scope."
+commands.allow = ["list_database_backups"]
+
+[[permission]]
+identifier = "deny-list-database-backups"
+description = "Denies the list_database_backups command without any pre-configured scope."
+commands.deny = ["list_database_backups"]

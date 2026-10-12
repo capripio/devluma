@@ -1,0 +1,578 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "2026.10.3",
+  "packages": [
+    {
+      "id": "php",
+      "displayName": "PHP",
+      "category": "runtime",
+      "description": "Official PHP for Windows, Non-Thread-Safe x64 builds (for the CLI and FastCGI).",
+      "publisher": "The PHP Group",
+      "homepageUrl": "https://www.php.net/",
+      "license": {
+        "id": "PHP-3.01",
+        "url": "https://www.php.net/license/3_01.txt"
+      },
+      "supportPolicyUrl": "https://www.php.net/supported-versions.php",
+      "adapter": "php",
+      "allowedHosts": [
+        "windows.php.net",
+        "downloads.php.net"
+      ],
+      "versions": [
+        {
+          "version": "8.5.11",
+          "architecture": "x64",
+          "source": {
+            "url": "https://windows.php.net/downloads/releases/php-8.5.11-nts-Win32-vs17-x64.zip",
+            "archive": "zip",
+            "sizeBytes": 36048897
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "0ea96e0d2b9b737a6036f05cf4e95c49313faa6d0f27bd97edb2742503f0c043"
+          },
+          "executables": [
+            {
+              "path": "php.exe",
+              "expectedVersion": "8.5.11"
+            },
+            {
+              "path": "php-cgi.exe",
+              "expectedVersion": "8.5.11"
+            }
+          ],
+          "endOfLifeDate": "2029-12-31"
+        },
+        {
+          "version": "8.4.26",
+          "architecture": "x64",
+          "source": {
+            "url": "https://windows.php.net/downloads/releases/php-8.4.26-nts-Win32-vs17-x64.zip",
+            "archive": "zip",
+            "sizeBytes": 35103568
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "da68394f9193b7f6b89d0c76861a4034ae10efee7fd55a7255d8118c2acf70d7"
+          },
+          "executables": [
+            {
+              "path": "php.exe",
+              "expectedVersion": "8.4.26"
+            },
+            {
+              "path": "php-cgi.exe",
+              "expectedVersion": "8.4.26"
+            }
+          ],
+          "endOfLifeDate": "2028-12-31"
+        },
+        {
+          "version": "8.3.35",
+          "architecture": "x64",
+          "source": {
+            "url": "https://windows.php.net/downloads/releases/php-8.3.35-nts-Win32-vs16-x64.zip",
+            "archive": "zip",
+            "sizeBytes": 33873909
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "25a8e2ac9ff30f1d768d1447c09a600617fa6e6082729f6e95f008b59c91fe45"
+          },
+          "executables": [
+            {
+              "path": "php.exe",
+              "expectedVersion": "8.3.35"
+            },
+            {
+              "path": "php-cgi.exe",
+              "expectedVersion": "8.3.35"
+            }
+          ],
+          "endOfLifeDate": "2027-12-31"
+        },
+        {
+          "version": "8.2.34",
+          "architecture": "x64",
+          "source": {
+            "url": "https://windows.php.net/downloads/releases/php-8.2.34-nts-Win32-vs16-x64.zip",
+            "archive": "zip",
+            "sizeBytes": 33472978
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "03249b5c9414c6dbe30276f4a7598bd9d2a7417ee81f709b06b99e9c4a2aff4f"
+          },
+          "executables": [
+            {
+              "path": "php.exe",
+              "expectedVersion": "8.2.34"
+            },
+            {
+              "path": "php-cgi.exe",
+              "expectedVersion": "8.2.34"
+            }
+          ],
+          "endOfLifeDate": "2026-12-31"
+        }
+      ]
+    },
+    {
+      "id": "nginx",
+      "displayName": "Nginx",
+      "category": "web_server",
+      "description": "Official nginx for Windows from nginx.org.",
+      "publisher": "F5, Inc. (nginx)",
+      "homepageUrl": "https://nginx.org/",
+      "license": {
+        "id": "BSD-2-Clause",
+        "url": "https://nginx.org/LICENSE"
+      },
+      "adapter": "nginx",
+      "allowedHosts": [
+        "nginx.org"
+      ],
+      "versions": [
+        {
+          "version": "1.30.5",
+          "architecture": "x64",
+          "source": {
+            "url": "https://nginx.org/download/nginx-1.30.5.zip",
+            "archive": "zip",
+            "sizeBytes": 2776622,
+            "stripComponents": 1
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "e5afe28b6a50bec92c478bfe1a4d3758206b80fb77159277bc5c4e88955c2a35"
+          },
+          "executables": [
+            {
+              "path": "nginx.exe",
+              "expectedVersion": "1.30.5"
+            }
+          ]
+        },
+        {
+          "version": "1.31.6",
+          "architecture": "x64",
+          "source": {
+            "url": "https://nginx.org/download/nginx-1.31.6.zip",
+            "archive": "zip",
+            "sizeBytes": 2797070,
+            "stripComponents": 1
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "bb65edcfc22a2214a4afaac59f038f560c02b98d4b49c5dca1206d3cc5d631c9"
+          },
+          "executables": [
+            {
+              "path": "nginx.exe",
+              "expectedVersion": "1.31.6"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "apache",
+      "displayName": "Apache httpd",
+      "category": "web_server",
+      "description": "Apache HTTP Server 2.4 for Windows x64, built by Apache Lounge (the build the Apache project links for Windows).",
+      "publisher": "Apache Lounge (Steffen Land); Apache Software Foundation (source)",
+      "homepageUrl": "https://www.apachelounge.com/",
+      "license": {
+        "id": "Apache-2.0",
+        "url": "https://www.apache.org/licenses/LICENSE-2.0"
+      },
+      "adapter": "apache",
+      "allowedHosts": [
+        "www.apachelounge.com"
+      ],
+      "versions": [
+        {
+          "version": "2.4.69",
+          "architecture": "x64",
+          "source": {
+            "url": "https://www.apachelounge.com/download/VS18/binaries/httpd-2.4.69-261002-Win64-VS18.zip",
+            "archive": "zip",
+            "sizeBytes": 14495717,
+            "stripComponents": 1
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "ca272e0b75abad78b1e4029a0753b20ff2232d2d857e8eebeea5d469c5776977"
+          },
+          "executables": [
+            {
+              "path": "bin/httpd.exe",
+              "expectedVersion": "2.4.69"
+            }
+          ],
+          "releaseDate": "2026-10-02"
+        }
+      ]
+    },
+    {
+      "id": "mariadb",
+      "displayName": "MariaDB",
+      "category": "database",
+      "description": "MariaDB Community Server (MySQL-compatible), official Windows x64 builds.",
+      "publisher": "MariaDB Foundation",
+      "homepageUrl": "https://mariadb.org/",
+      "license": {
+        "id": "GPL-2.0-only",
+        "url": "https://mariadb.com/kb/en/mariadb-license/"
+      },
+      "supportPolicyUrl": "https://mariadb.org/about/#maintenance-policy",
+      "adapter": "mariadb",
+      "allowedHosts": [
+        "archive.mariadb.org"
+      ],
+      "versions": [
+        {
+          "version": "11.8.9",
+          "architecture": "x64",
+          "source": {
+            "url": "https://archive.mariadb.org/mariadb-11.8.9/winx64-packages/mariadb-11.8.9-winx64.zip",
+            "archive": "zip",
+            "sizeBytes": 97016251,
+            "stripComponents": 1
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "830c46727d9278eae212ae3eca44eeb9e71b2a68704e95f344a64fba7b1963f5"
+          },
+          "executables": [
+            {
+              "path": "bin/mariadbd.exe",
+              "expectedVersion": "11.8.9"
+            },
+            {
+              "path": "bin/mariadb.exe",
+              "expectedVersion": "11.8.9"
+            }
+          ],
+          "releaseDate": "2026-08-22",
+          "endOfLifeDate": "2030-02-13"
+        },
+        {
+          "version": "11.4.13",
+          "architecture": "x64",
+          "source": {
+            "url": "https://archive.mariadb.org/mariadb-11.4.13/winx64-packages/mariadb-11.4.13-winx64.zip",
+            "archive": "zip",
+            "sizeBytes": 95024126,
+            "stripComponents": 1
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "d62986d433eeebfde218560b276103831604a61e929e87f1a17f5aebd80257e2"
+          },
+          "executables": [
+            {
+              "path": "bin/mariadbd.exe",
+              "expectedVersion": "11.4.13"
+            },
+            {
+              "path": "bin/mariadb.exe",
+              "expectedVersion": "11.4.13"
+            }
+          ],
+          "releaseDate": "2026-08-22",
+          "endOfLifeDate": "2029-05-29"
+        }
+      ]
+    },
+    {
+      "id": "node",
+      "displayName": "Node.js",
+      "category": "runtime",
+      "description": "Official Node.js LTS builds for Windows x64 (includes npm and npx).",
+      "publisher": "OpenJS Foundation (Node.js)",
+      "homepageUrl": "https://nodejs.org/",
+      "license": {
+        "id": "MIT",
+        "url": "https://github.com/nodejs/node/blob/main/LICENSE"
+      },
+      "supportPolicyUrl": "https://nodejs.org/en/about/previous-releases",
+      "adapter": "node",
+      "allowedHosts": [
+        "nodejs.org"
+      ],
+      "versions": [
+        {
+          "version": "24.21.0",
+          "architecture": "x64",
+          "source": {
+            "url": "https://nodejs.org/dist/v24.21.0/node-v24.21.0-win-x64.zip",
+            "archive": "zip",
+            "sizeBytes": 37618919,
+            "stripComponents": 1
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "158f7685b44de51f6c0df1d153526cbcd3e1bc739a8dfc607721cef75de9e541"
+          },
+          "executables": [
+            {
+              "path": "node.exe",
+              "expectedVersion": "24.21.0"
+            }
+          ],
+          "releaseDate": "2026-09-07",
+          "endOfLifeDate": "2028-04-30"
+        },
+        {
+          "version": "22.23.3",
+          "architecture": "x64",
+          "source": {
+            "url": "https://nodejs.org/dist/v22.23.3/node-v22.23.3-win-x64.zip",
+            "archive": "zip",
+            "sizeBytes": 35574076,
+            "stripComponents": 1
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "2b0ff57b049cda1bbcea2240eec20467018713c1efe1f7360c2681859b90ed71"
+          },
+          "executables": [
+            {
+              "path": "node.exe",
+              "expectedVersion": "22.23.3"
+            }
+          ],
+          "releaseDate": "2026-09-23",
+          "endOfLifeDate": "2027-04-30"
+        }
+      ]
+    },
+    {
+      "id": "python",
+      "displayName": "Python",
+      "category": "runtime",
+      "description": "CPython for Windows x64 from the Python Software Foundation's NuGet package (includes pip).",
+      "publisher": "Python Software Foundation",
+      "homepageUrl": "https://www.python.org/",
+      "license": {
+        "id": "PSF-2.0",
+        "url": "https://docs.python.org/3/license.html"
+      },
+      "supportPolicyUrl": "https://devguide.python.org/versions/",
+      "adapter": "python",
+      "allowedHosts": [
+        "api.nuget.org"
+      ],
+      "versions": [
+        {
+          "version": "3.15.0",
+          "architecture": "x64",
+          "source": {
+            "url": "https://api.nuget.org/v3-flatcontainer/python/3.15.0/python.3.15.0.nupkg",
+            "archive": "zip",
+            "sizeBytes": 16619621
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "2f59399a704f1b7078606eca622992021fa4521058e25fdd09e55f8533f2a12e"
+          },
+          "executables": [
+            {
+              "path": "tools/python.exe",
+              "expectedVersion": "3.15.0"
+            }
+          ],
+          "releaseDate": "2026-10-09",
+          "endOfLifeDate": "2031-10-31"
+        },
+        {
+          "version": "3.14.8",
+          "architecture": "x64",
+          "source": {
+            "url": "https://api.nuget.org/v3-flatcontainer/python/3.14.8/python.3.14.8.nupkg",
+            "archive": "zip",
+            "sizeBytes": 15554015
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "ce85f674d9a63029f709cbff7a3da1c6bc5bfcfaefdd9999f98fa0290470c454"
+          },
+          "executables": [
+            {
+              "path": "tools/python.exe",
+              "expectedVersion": "3.14.8"
+            }
+          ],
+          "releaseDate": "2026-09-30",
+          "endOfLifeDate": "2030-10-31"
+        }
+      ]
+    },
+    {
+      "id": "mailpit",
+      "displayName": "Mailpit",
+      "category": "mail",
+      "description": "Catches outgoing email from your apps and shows it in a web interface. Nothing is delivered.",
+      "publisher": "Ralph Slooten (axllent/mailpit)",
+      "homepageUrl": "https://mailpit.axllent.org/",
+      "license": {
+        "id": "MIT",
+        "url": "https://github.com/axllent/mailpit/blob/develop/LICENSE"
+      },
+      "adapter": "mailpit",
+      "allowedHosts": [
+        "github.com",
+        "release-assets.githubusercontent.com",
+        "objects.githubusercontent.com"
+      ],
+      "versions": [
+        {
+          "version": "1.31.5",
+          "architecture": "x64",
+          "source": {
+            "url": "https://github.com/axllent/mailpit/releases/download/v1.31.5/mailpit-windows-amd64.zip",
+            "archive": "zip",
+            "sizeBytes": 10639460
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "9637e21c02b33185fe69268ba05317152a5d8ac7877115e8a70e29b7e199e8dc"
+          },
+          "executables": [
+            {
+              "path": "mailpit.exe",
+              "expectedVersion": "1.31.5"
+            }
+          ],
+          "releaseDate": "2026-10-11"
+        }
+      ]
+    },
+    {
+      "id": "postgresql",
+      "displayName": "PostgreSQL",
+      "category": "database",
+      "description": "PostgreSQL server binaries for Windows x64 from EnterpriseDB (linked from postgresql.org). The archive also contains pgAdmin 4.",
+      "publisher": "PostgreSQL Global Development Group (binaries built by EnterpriseDB)",
+      "homepageUrl": "https://www.postgresql.org/",
+      "license": {
+        "id": "PostgreSQL",
+        "url": "https://www.postgresql.org/about/licence/"
+      },
+      "supportPolicyUrl": "https://www.postgresql.org/support/versioning/",
+      "adapter": "postgresql",
+      "allowedHosts": [
+        "get.enterprisedb.com"
+      ],
+      "versions": [
+        {
+          "version": "18.6",
+          "architecture": "x64",
+          "source": {
+            "url": "https://get.enterprisedb.com/postgresql/postgresql-18.6-5-windows-x64-binaries.zip",
+            "archive": "zip",
+            "sizeBytes": 384620317,
+            "stripComponents": 1
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "e2246ba91d22345bc3d017586c09ede52d9df180b1eeb480f050445f1cad84e2"
+          },
+          "executables": [
+            {
+              "path": "bin/postgres.exe",
+              "expectedVersion": "18.6"
+            }
+          ],
+          "releaseDate": "2026-10-01",
+          "endOfLifeDate": "2030-11-14"
+        },
+        {
+          "version": "17.11",
+          "architecture": "x64",
+          "source": {
+            "url": "https://get.enterprisedb.com/postgresql/postgresql-17.11-5-windows-x64-binaries.zip",
+            "archive": "zip",
+            "sizeBytes": 381531864,
+            "stripComponents": 1
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "80379b2c04d51c30225532e0ae04509899141e9957ed096fe749d7fd9df8f82f"
+          },
+          "executables": [
+            {
+              "path": "bin/postgres.exe",
+              "expectedVersion": "17.11"
+            }
+          ],
+          "releaseDate": "2026-10-01",
+          "endOfLifeDate": "2029-11-08"
+        }
+      ]
+    },
+    {
+      "id": "mongodb",
+      "displayName": "MongoDB Community Server",
+      "category": "database",
+      "description": "MongoDB Community Server for Windows x64 from mongodb.org. Large download: the archive includes debug symbols.",
+      "publisher": "MongoDB, Inc.",
+      "homepageUrl": "https://www.mongodb.com/",
+      "license": {
+        "id": "SSPL-1.0",
+        "url": "https://www.mongodb.com/legal/licensing/server-side-public-license"
+      },
+      "supportPolicyUrl": "https://www.mongodb.com/legal/support-policy/lifecycles",
+      "adapter": "mongodb",
+      "allowedHosts": [
+        "fastdl.mongodb.org"
+      ],
+      "versions": [
+        {
+          "version": "9.0.2",
+          "architecture": "x64",
+          "source": {
+            "url": "https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-9.0.2.zip",
+            "archive": "zip",
+            "sizeBytes": 987903779,
+            "stripComponents": 1
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "2cabba2e80b90bcd1c1096845711975199104148c849a007984cb3ee4d237406"
+          },
+          "executables": [
+            {
+              "path": "bin/mongod.exe",
+              "expectedVersion": "9.0.2"
+            }
+          ],
+          "releaseDate": "2026-09-17"
+        },
+        {
+          "version": "8.0.32",
+          "architecture": "x64",
+          "source": {
+            "url": "https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-8.0.32.zip",
+            "archive": "zip",
+            "sizeBytes": 807312757,
+            "stripComponents": 1
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "5a0675fdec49b544cd5d374ad50a9a594cf5b3278b5ace658aa51cbb4df17177"
+          },
+          "executables": [
+            {
+              "path": "bin/mongod.exe",
+              "expectedVersion": "8.0.32"
+            }
+          ],
+          "releaseDate": "2026-09-03"
+        }
+      ]
+    }
+  ]
+}

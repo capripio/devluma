@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-delete-certificate"
+description = "Enables the delete_certificate command without any pre-configured scope."
+commands.allow = ["delete_certificate"]
+
+[[permission]]
+identifier = "deny-delete-certificate"
+description = "Denies the delete_certificate command without any pre-configured scope."
+commands.deny = ["delete_certificate"]

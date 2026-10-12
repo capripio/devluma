@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-check-catalog-update"
+description = "Enables the check_catalog_update command without any pre-configured scope."
+commands.allow = ["check_catalog_update"]
+
+[[permission]]
+identifier = "deny-check-catalog-update"
+description = "Denies the check_catalog_update command without any pre-configured scope."
+commands.deny = ["check_catalog_update"]

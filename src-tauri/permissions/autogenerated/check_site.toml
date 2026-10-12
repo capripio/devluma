@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-check-site"
+description = "Enables the check_site command without any pre-configured scope."
+commands.allow = ["check_site"]
+
+[[permission]]
+identifier = "deny-check-site"
+description = "Denies the check_site command without any pre-configured scope."
+commands.deny = ["check_site"]

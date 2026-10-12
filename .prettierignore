@@ -1,0 +1,6 @@
+dist
+src-tauri
+pnpm-lock.yaml
+*.md
+THIRD_PARTY_NOTICES.md
+sbom/

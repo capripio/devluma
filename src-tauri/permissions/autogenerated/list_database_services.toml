@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-list-database-services"
+description = "Enables the list_database_services command without any pre-configured scope."
+commands.allow = ["list_database_services"]
+
+[[permission]]
+identifier = "deny-list-database-services"
+description = "Denies the list_database_services command without any pre-configured scope."
+commands.deny = ["list_database_services"]

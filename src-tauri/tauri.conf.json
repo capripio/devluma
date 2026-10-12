@@ -1,0 +1,79 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Devluma",
+  "version": "0.1.0",
+  "identifier": "pk.capripio.devluma",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "pnpm dev",
+    "beforeBuildCommand": "pnpm build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Devluma",
+        "width": 1200,
+        "height": 780,
+        "minWidth": 800,
+        "minHeight": 560,
+        "resizable": true,
+        "fullscreen": false,
+        "create": false
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src ipc: http://ipc.localhost; object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "windows": {
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper"
+      },
+      "nsis": {
+        "installMode": "currentUser",
+        "displayLanguageSelector": false
+      },
+      "signCommand": {
+        "cmd": "powershell",
+        "args": [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          "scripts/sign.ps1",
+          "%1"
+        ]
+      }
+    },
+    "publisher": "Devluma",
+    "copyright": "Copyright © 2026 Devluma",
+    "shortDescription": "Local development environment manager for Windows",
+    "longDescription": "Devluma installs and runs PHP, web servers, databases and tools for local development, with project-aware runtimes, local domains and HTTPS.",
+    "resources": {
+      "../THIRD_PARTY_NOTICES.md": "THIRD_PARTY_NOTICES.md",
+      "../sbom/devluma.cdx.json": "sbom/devluma.cdx.json"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEJDQTUxNDYyRkNCRTc5MkUKUldRdWViNzhZaFNsdlBRR0IyYUlqbU9ISkx3bU8vMXhPaWlBbnVqdThqMGtkdjlWa1lpWkoxSjkK",
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-create-dev-certificate"
+description = "Enables the create_dev_certificate command without any pre-configured scope."
+commands.allow = ["create_dev_certificate"]
+
+[[permission]]
+identifier = "deny-create-dev-certificate"
+description = "Denies the create_dev_certificate command without any pre-configured scope."
+commands.deny = ["create_dev_certificate"]

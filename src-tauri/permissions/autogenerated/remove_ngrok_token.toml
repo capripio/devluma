@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-remove-ngrok-token"
+description = "Enables the remove_ngrok_token command without any pre-configured scope."
+commands.allow = ["remove_ngrok_token"]
+
+[[permission]]
+identifier = "deny-remove-ngrok-token"
+description = "Denies the remove_ngrok_token command without any pre-configured scope."
+commands.deny = ["remove_ngrok_token"]

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-create-php-ini"
+description = "Enables the create_php_ini command without any pre-configured scope."
+commands.allow = ["create_php_ini"]
+
+[[permission]]
+identifier = "deny-create-php-ini"
+description = "Denies the create_php_ini command without any pre-configured scope."
+commands.deny = ["create_php_ini"]
