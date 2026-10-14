@@ -47,6 +47,11 @@ const DISK_FACTOR: u64 = 4;
 /// Runs an executable with fixed arguments and returns its combined output.
 pub trait ExecutableProbe: Send + Sync {
     fn run(&self, exe: &Path, args: &[&str]) -> Result<String, String>;
+
+    /// The executable's fixed file version (`a.b.c.d`), read without running it.
+    fn file_version(&self, _exe: &Path) -> Result<String, String> {
+        Err("reading version resources isn't supported here".into())
+    }
 }
 
 pub struct ProcessProbe;
@@ -56,6 +61,23 @@ impl ExecutableProbe for ProcessProbe {
         let out = crate::platform::windows::process::run_captured(exe, args, PROBE_TIMEOUT)
             .map_err(|e| e.to_string())?;
         Ok(format!("{}\n{}", out.stdout, out.stderr))
+    }
+
+    fn file_version(&self, exe: &Path) -> Result<String, String> {
+        crate::platform::windows::version_info::file_version(exe).map_err(|e| e.to_string())
+    }
+}
+
+/// What `adapter.parse_version` reads for `exe`: its probe output, or its version resource.
+pub fn probe_output(
+    probe: &dyn ExecutableProbe,
+    adapter: AdapterId,
+    exe: &Path,
+) -> Result<String, String> {
+    if adapter.reads_version_resource() {
+        probe.file_version(exe).map(|v| format!("FileVersion {v}"))
+    } else {
+        probe.run(exe, adapter.version_probe().args)
     }
 }
 
@@ -573,7 +595,6 @@ async fn verify_executables(
     version: &VersionManifest,
     root: &Path,
 ) -> Result<(), Outcome> {
-    let probe = adapter.version_probe();
     for exe in &version.executables {
         let path = paths::join_relative(root, &exe.path).map_err(|_| {
             fail(
@@ -591,21 +612,22 @@ async fn verify_executables(
             ));
         }
         let probe_impl = Arc::clone(&ctx.probe);
-        let output =
-            tauri::async_runtime::spawn_blocking(move || probe_impl.run(&path, probe.args))
-                .await
-                .map_err(|_| {
-                    fail(
-                        ErrorCode::Internal,
-                        "Executable verification stopped unexpectedly.",
-                    )
-                })?
-                .map_err(|e| {
-                    fail(
-                        ErrorCode::IntegrityError,
-                        format!("Could not run {}: {e}", exe.path),
-                    )
-                })?;
+        let output = tauri::async_runtime::spawn_blocking(move || {
+            probe_output(&*probe_impl, adapter, &path)
+        })
+        .await
+        .map_err(|_| {
+            fail(
+                ErrorCode::Internal,
+                "Executable verification stopped unexpectedly.",
+            )
+        })?
+        .map_err(|e| {
+            fail(
+                ErrorCode::IntegrityError,
+                format!("Could not run {}: {e}", exe.path),
+            )
+        })?;
         match adapter.parse_version(&output) {
             Some(found) if found == exe.expected_version => {}
             Some(found) => {
@@ -677,6 +699,33 @@ mod tests {
     /// Reports whatever version each executable path was registered with.
     #[derive(Default)]
     struct FakeProbe(StdMutex<Vec<(String, String)>>);
+
+    #[test]
+    fn version_resources_are_read_instead_of_running_the_program() {
+        struct ResourceOnly;
+        impl ExecutableProbe for ResourceOnly {
+            fn run(&self, _: &Path, _: &[&str]) -> Result<String, String> {
+                panic!("Cmder.exe must not be run");
+            }
+            fn file_version(&self, _: &Path) -> Result<String, String> {
+                Ok("1.3.25.328".into())
+            }
+        }
+        let out = probe_output(&ResourceOnly, AdapterId::Cmder, Path::new("Cmder.exe")).unwrap();
+        assert_eq!(
+            AdapterId::Cmder.parse_version(&out).as_deref(),
+            Some("1.3.25")
+        );
+        // Probes without version-resource support refuse rather than guess.
+        assert!(
+            probe_output(
+                &FakeProbe(StdMutex::new(vec![])),
+                AdapterId::Cmder,
+                Path::new("Cmder.exe")
+            )
+            .is_err()
+        );
+    }
 
     impl ExecutableProbe for FakeProbe {
         fn run(&self, exe: &Path, _args: &[&str]) -> Result<String, String> {
@@ -1069,6 +1118,60 @@ mod tests {
             details
                 .available_extensions
                 .contains(&"mbstring".to_owned())
+        );
+    }
+
+    /// Cmder from the bundled catalog: verified by its version resource (Cmder.exe is never
+    /// run). `cargo test live_cmder_install -- --ignored` (downloads ~12 MB).
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "uses the network"]
+    async fn live_cmder_install_from_bundled_catalog() {
+        let catalog = crate::services::catalog::load();
+        assert!(catalog.issues.is_empty(), "{:?}", catalog.issues);
+        let dir = tempfile::tempdir().unwrap();
+        let paths = DataPaths::under(dir.path());
+        paths.create_all().unwrap();
+        let ctx = InstallContext {
+            db: Arc::new(crate::persistence::test_support::db()),
+            catalog: Arc::new(catalog),
+            paths,
+            probe: Arc::new(ProcessProbe),
+            sink: Arc::new(RecordingSink::default()),
+            download: DownloadOptions::default(),
+        };
+        let manager = Arc::new(InstallManager::default());
+        let (started, handle) = manager
+            .start(
+                ctx.clone(),
+                InstallRequest {
+                    package_id: "cmder".into(),
+                    version: "1.3.25".into(),
+                    architecture: Architecture::X64,
+                },
+            )
+            .unwrap();
+        handle.await.unwrap();
+        let op = ctx.db.read(|c| ops::get(c, &started.operation_id)).unwrap();
+        assert_eq!(
+            op.status,
+            OperationStatus::Succeeded,
+            "{:?}",
+            op.safe_error_message
+        );
+        let exe = ctx
+            .db
+            .read(crate::services::terminal::cmder_exe)
+            .unwrap()
+            .expect("installed Cmder is found");
+        assert_eq!(
+            exe,
+            install_dir(&ctx.paths, "cmder", "1.3.25", Architecture::X64).join("Cmder.exe")
+        );
+        assert!(
+            exe.with_file_name("vendor")
+                .join("conemu-maximus5")
+                .join("ConEmu64.exe")
+                .is_file()
         );
     }
 

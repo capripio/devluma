@@ -129,7 +129,7 @@ pub fn for_adapter(adapter: AdapterId) -> Option<&'static dyn ServiceBehavior> {
         AdapterId::Postgresql => Some(&Postgresql),
         AdapterId::Mongodb => Some(&Mongodb),
         AdapterId::Apache => Some(&Apache),
-        AdapterId::Node | AdapterId::Python => None,
+        AdapterId::Node | AdapterId::Python | AdapterId::Cmder => None,
         #[cfg(test)]
         AdapterId::Fixture => Some(&tests_support::Fixture),
     }

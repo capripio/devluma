@@ -1,4 +1,5 @@
 pub mod acl;
+pub mod autostart;
 pub mod certstore;
 pub mod credential;
 pub mod disk;
@@ -8,3 +9,4 @@ pub mod hosts_file;
 pub mod job;
 pub mod ports;
 pub mod process;
+pub mod version_info;

@@ -176,13 +176,21 @@ impl AppState {
     }
 
     pub fn install_context(&self) -> Result<InstallContext, IpcError> {
+        let db = self.db()?;
+        let timeouts = db
+            .read(crate::services::preferences::load)?
+            .download_timeouts;
         Ok(InstallContext {
-            db: self.db()?,
+            db,
             catalog: Arc::clone(&self.catalog),
             paths: self.paths.clone(),
             probe: Arc::new(ProcessProbe),
             sink: Arc::clone(&self.sink),
-            download: DownloadOptions::default(),
+            download: DownloadOptions {
+                connect_timeout: std::time::Duration::from_secs(timeouts.connect_secs.into()),
+                idle_timeout: std::time::Duration::from_secs(timeouts.idle_secs.into()),
+                ..DownloadOptions::default()
+            },
         })
     }
 

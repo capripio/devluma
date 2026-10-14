@@ -562,3 +562,46 @@ export const certificateViewSchema = certificateSchema.extend({
   keyProtection: z.string(),
 });
 export type CertificateView = z.infer<typeof certificateViewSchema>;
+
+// Settings (ADR 0015) — mirrors `services::preferences` and `commands::settings`.
+export const terminalProgramSchema = z.enum(["power_shell", "command_prompt", "cmder"]);
+export type TerminalProgram = z.infer<typeof terminalProgramSchema>;
+export const defaultPortsSchema = z.object({
+  nginx: z.number(),
+  apache: z.number(),
+  mariadb: z.number(),
+  postgresql: z.number(),
+  mongodb: z.number(),
+  mailpit: z.number(),
+  mailpitWeb: z.number(),
+});
+export type DefaultPorts = z.infer<typeof defaultPortsSchema>;
+export const preferencesSchema = z.object({
+  domainSuffix: z.string(),
+  httpsPort: z.number().nullable(),
+  terminal: terminalProgramSchema,
+  defaultPorts: defaultPortsSchema,
+  startServices: z.array(z.string()),
+  downloadTimeouts: z.object({ connectSecs: z.number(), idleSecs: z.number() }),
+});
+export type Preferences = z.infer<typeof preferencesSchema>;
+export const launchAtLoginSchema = z.enum(["off", "on", "other_copy"]);
+export type LaunchAtLogin = z.infer<typeof launchAtLoginSchema>;
+export const preferencesViewSchema = z.object({
+  preferences: preferencesSchema,
+  suggestedSuffixes: z.array(z.string()),
+  suffixAdvice: z.object({ httpsSupported: z.boolean(), warnings: z.array(z.string()) }),
+  cmderInstalled: z.boolean(),
+  launchAtLogin: launchAtLoginSchema,
+  launchAtLoginSupported: z.boolean(),
+});
+export type PreferencesView = z.infer<typeof preferencesViewSchema>;
+export const terminalOpenedSchema = z.object({
+  program: terminalProgramSchema,
+  pathPrefix: z.array(z.string()),
+});
+export const storageUsageSchema = z.object({
+  root: z.string(),
+  folders: z.array(z.object({ key: z.string(), path: z.string(), bytes: z.number(), files: z.number() })),
+});
+export type StorageUsage = z.infer<typeof storageUsageSchema>;

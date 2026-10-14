@@ -10,6 +10,7 @@ pub mod packages;
 pub mod projects;
 pub mod runtimes;
 pub mod services;
+pub mod settings;
 pub mod setup;
 pub mod sites;
 pub mod tunnels;

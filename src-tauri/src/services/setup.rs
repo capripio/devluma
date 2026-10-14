@@ -153,16 +153,23 @@ fn free_port(db: &Database, start: u16) -> Option<u16> {
         .find(|p| !taken.contains(&i64::from(*p)) && ports::is_free(*p))
 }
 
-fn defaults(adapter: AdapterId) -> Option<(&'static str, u16, Option<u16>)> {
-    Some(match adapter {
-        AdapterId::Nginx => ("web", 8080, None),
-        AdapterId::Apache => ("apache", 8081, None),
-        AdapterId::Mariadb => ("db", 3306, None),
-        AdapterId::Postgresql => ("pg", 5432, None),
-        AdapterId::Mongodb => ("mongo", 27017, None),
-        AdapterId::Mailpit => ("mail", 1025, Some(8025)),
+/// Service name and ports (from Settings → default ports) for a service adapter.
+fn defaults(db: &Database, adapter: AdapterId) -> Option<(&'static str, u16, Option<u16>)> {
+    let name = match adapter {
+        AdapterId::Nginx => "web",
+        AdapterId::Apache => "apache",
+        AdapterId::Mariadb => "db",
+        AdapterId::Postgresql => "pg",
+        AdapterId::Mongodb => "mongo",
+        AdapterId::Mailpit => "mail",
         _ => return None,
-    })
+    };
+    let ports = db
+        .read(super::preferences::load)
+        .map(|p| p.default_ports)
+        .unwrap_or_default();
+    let (port, admin) = ports.for_adapter(adapter)?;
+    Some((name, port, admin))
 }
 
 pub struct SetupDeps {
@@ -280,7 +287,9 @@ pub fn start(
             };
 
             // 2. Runtimes become the default if none is set yet.
-            let is_runtime = matches!(adapter.service_role(), None | Some(ServiceRole::FastCgi));
+            // Cmder is a terminal, not a runtime: it never becomes a "default".
+            let is_runtime = matches!(adapter.service_role(), None | Some(ServiceRole::FastCgi))
+                && adapter != AdapterId::Cmder;
             if is_runtime && runtime::effective_default_missing(&deps.db, &item.package_id) {
                 let (db, catalog, probe, sink) = (
                     Arc::clone(&deps.db),
@@ -304,7 +313,7 @@ pub fn start(
             }
 
             // 3. Services get one instance on a free port, unless one exists already.
-            if let Some((svc_name, port, admin)) = defaults(adapter) {
+            if let Some((svc_name, port, admin)) = defaults(&deps.db, adapter) {
                 let exists = deps
                     .db
                     .read(services::list)

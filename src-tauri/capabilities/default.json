@@ -74,6 +74,12 @@
     "allow-trust-certificate",
     "allow-remove-certificate-trust",
     "allow-renew-certificate",
-    "allow-delete-certificate"
+    "allow-delete-certificate",
+    "allow-get-preferences",
+    "allow-set-preferences",
+    "allow-set-launch-at-login",
+    "allow-open-terminal",
+    "allow-get-storage-usage",
+    "allow-open-storage-folder"
   ]
 }

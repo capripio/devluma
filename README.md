@@ -44,7 +44,7 @@ config change is **validated and reversible**, and services only ever listen on 
 - **Per-project version pinning**: pin PHP 8.2 for a legacy app and PHP 8.5 for a new one.
   Pins never affect other projects or the global default.
 - **Project terminal** that opens with the right runtime versions on `PATH` — your system
-  `PATH` is never modified.
+  `PATH` is never modified. Choose PowerShell, Command Prompt or **Cmder**.
 
 ### Web servers and databases
 - **Nginx** and **Apache httpd**, with PHP served through FastCGI.

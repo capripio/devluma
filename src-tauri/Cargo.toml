@@ -1,6 +1,6 @@
 [package]
 name = "devluma"
-version = "0.1.0"
+version = "0.2.0"
 description = "Windows-first local development environment manager"
 authors = ["Muhammad Asif"]
 license = "GPL-3.0-only"
@@ -41,6 +41,7 @@ sha1 = "0.11.0"
 tauri-plugin-updater = "2.13.3"
 minisign-verify = "0.2.5"
 base64 = "0.22.1"
+windows-registry = "0.6.1"
 
 [dev-dependencies]
 rustls-pki-types = { version = "1", features = ["std"] }

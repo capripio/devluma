@@ -11,14 +11,14 @@ import type { ProjectView, SitePlan, SiteRequest, SiteView } from "../../types/d
 
 const PHP_KINDS = new Set(["laravel", "symfony", "wordpress", "php"]);
 
-/** "My Shop" → "my-shop.test" (mirrors `domain_name::suggest`). */
-export function suggestDomain(name: string): string {
+/** ("My Shop", "test") → "my-shop.test" (mirrors `domain_name::suggest`). */
+export function suggestDomain(name: string, suffix = "test"): string {
   const slug = name
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  return `${slug || "site"}.test`;
+  return `${slug || "site"}.${suffix}`;
 }
 
 interface SiteFormProps {
@@ -29,7 +29,17 @@ interface SiteFormProps {
 
 /** Add or re-apply a site: fill in → preview the exact changes → apply. */
 export function SiteForm({ existing, onDone }: SiteFormProps) {
-  const data = useAsync(() => Promise.all([ipc.listProjects(), ipc.listServices()]));
+  const data = useAsync(() =>
+    Promise.all([
+      ipc.listProjects(),
+      ipc.listServices(),
+      // The suffix from Settings; ".test" if preferences can't be read.
+      ipc.getPreferences().then(
+        (p) => p.preferences.domainSuffix,
+        () => "test",
+      ),
+    ]),
+  );
   if (data.status === "pending") {
     return (
       <p role="status" className="text-sm text-fg-muted">
@@ -38,7 +48,7 @@ export function SiteForm({ existing, onDone }: SiteFormProps) {
     );
   }
   if (data.status === "error") return <ErrorPanel error={data.error} onRetry={data.reload} />;
-  const [projects, services] = data.data;
+  const [projects, services, suffix] = data.data;
   const webServers = services.filter((s) => s.lifecycleAdapter === "nginx");
   if (projects.length === 0 || webServers.length === 0) {
     return (
@@ -65,24 +75,28 @@ export function SiteForm({ existing, onDone }: SiteFormProps) {
       </div>
     );
   }
-  return <Form projects={projects} webServers={webServers} existing={existing} onDone={onDone} />;
+  return (
+    <Form projects={projects} webServers={webServers} suffix={suffix} existing={existing} onDone={onDone} />
+  );
 }
 
 function Form({
   projects,
   webServers,
+  suffix,
   existing,
   onDone,
 }: {
   projects: ProjectView[];
   webServers: { id: string; instanceName: string; port: number | null }[];
+  suffix: string;
   existing?: SiteView;
   onDone: () => void;
 }) {
   const initialProject = projects.find((p) => p.id === existing?.projectId) ?? projects[0]!;
   const [projectId, setProjectId] = useState(initialProject.id);
   const project = projects.find((p) => p.id === projectId) ?? initialProject;
-  const [domain, setDomain] = useState(existing?.domain ?? suggestDomain(initialProject.name));
+  const [domain, setDomain] = useState(existing?.domain ?? suggestDomain(initialProject.name, suffix));
   const [webId, setWebId] = useState(existing?.webServerServiceId ?? webServers[0]!.id);
   const [usePhp, setUsePhp] = useState(
     existing ? existing.phpInstallationId !== null : PHP_KINDS.has(initialProject.detection.kind ?? ""),
@@ -112,7 +126,7 @@ function Form({
     setProjectId(id);
     setPlan(null);
     if (p && !existing) {
-      setDomain(suggestDomain(p.name));
+      setDomain(suggestDomain(p.name, suffix));
       setDocroot(p.detection.suggestedDocumentRoot);
       setUsePhp(PHP_KINDS.has(p.detection.kind ?? ""));
     }

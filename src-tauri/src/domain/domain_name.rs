@@ -62,8 +62,9 @@ pub fn check(input: &str) -> Result<DomainCheck, String> {
     })
 }
 
-/// A domain suggestion from a project name, e.g. "My Shop" → "my-shop.test".
-pub fn suggest(project_name: &str) -> String {
+/// A domain suggestion from a project name and the suffix from Settings (without the dot),
+/// e.g. ("My Shop", "test") → "my-shop.test".
+pub fn suggest(project_name: &str, suffix: &str) -> String {
     let mut slug = String::new();
     for c in project_name.trim().to_lowercase().chars() {
         if c.is_ascii_alphanumeric() {
@@ -73,7 +74,7 @@ pub fn suggest(project_name: &str) -> String {
         }
     }
     let slug = slug.trim_end_matches('-');
-    format!("{}.test", if slug.is_empty() { "site" } else { slug })
+    format!("{}.{suffix}", if slug.is_empty() { "site" } else { slug })
 }
 
 #[cfg(test)]
@@ -121,8 +122,8 @@ mod tests {
 
     #[test]
     fn suggests_from_project_names() {
-        assert_eq!(suggest("My Shop!"), "my-shop.test");
-        assert_eq!(suggest("  "), "site.test");
-        assert_eq!(suggest("API v2"), "api-v2.test");
+        assert_eq!(suggest("My Shop!", "test"), "my-shop.test");
+        assert_eq!(suggest("  ", "test"), "site.test");
+        assert_eq!(suggest("API v2", "local"), "api-v2.local");
     }
 }

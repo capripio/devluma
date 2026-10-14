@@ -20,6 +20,8 @@ interface Choice {
 /** Creates a service from an installed web server, database or mail catcher. */
 export function AddServiceForm({ onDone }: { onDone: () => void }) {
   const catalog = useAsync(ipc.listPackages);
+  // Default ports from Settings; the built-in defaults apply if they can't be loaded.
+  const prefs = useAsync(ipc.getPreferences);
   const choices: Choice[] =
     catalog.status === "success"
       ? catalog.data.packages
@@ -67,7 +69,10 @@ export function AddServiceForm({ onDone }: { onDone: () => void }) {
     );
   }
 
-  const info = servicePackageInfo(selected.packageId);
+  const info = servicePackageInfo(
+    selected.packageId,
+    prefs.status === "success" ? prefs.data.preferences.defaultPorts : undefined,
+  );
   const effectivePort = port === "" ? info.defaultPort : Number(port);
   const effectiveAdminPort =
     info.adminPort && (adminPort === "" ? info.adminPort.default : Number(adminPort));

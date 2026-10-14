@@ -8,6 +8,7 @@ import {
   defaultHandlers,
   operation,
   packageView,
+  preferencesView,
   renderApp,
   versionView,
 } from "../../test/utils";
@@ -160,6 +161,35 @@ describe("services list", () => {
     await waitFor(() => expect(screen.queryByRole("form", { name: "Add service" })).not.toBeInTheDocument());
     expect(mock.calls.find((c) => c.command === "create_service")?.args).toEqual({
       request: { installationId: "i-db", name: "db", port: 3307, useExistingData: false },
+    });
+  });
+
+  it("uses the default port chosen in Settings", async () => {
+    const mock = createMockAdapter({
+      ...defaultHandlers,
+      list_packages: () => installedCatalog,
+      get_preferences: () =>
+        preferencesView({
+          defaultPorts: {
+            nginx: 8080,
+            apache: 8081,
+            mariadb: 3310,
+            postgresql: 5432,
+            mongodb: 27017,
+            mailpit: 1025,
+            mailpitWeb: 8025,
+          },
+        }),
+      create_service: () => ({ operationId: "op-2" }),
+    });
+    await renderApp("/services", mock);
+    await userEvent.click((await screen.findAllByRole("button", { name: "Add service" }))[0]!);
+    const form = await screen.findByRole("form", { name: "Add service" });
+    await userEvent.selectOptions(within(form).getByLabelText("Installed version"), "i-db");
+    await userEvent.click(within(form).getByRole("button", { name: "Create service" }));
+    await waitFor(() => expect(mock.calls.some((c) => c.command === "create_service")).toBe(true));
+    expect(mock.calls.find((c) => c.command === "create_service")?.args).toMatchObject({
+      request: { installationId: "i-db", port: 3310 },
     });
   });
 

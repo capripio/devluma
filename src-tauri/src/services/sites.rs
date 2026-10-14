@@ -390,12 +390,12 @@ impl SiteService {
         })
     }
 
-    /// HTTPS port for a site on `web`: shared with the server's other HTTPS sites, else 443
-    /// (when HTTP is on 80) or 8443, which must then be free.
+    /// HTTPS port for a site on `web`: shared with the server's other HTTPS sites, else the
+    /// one chosen in Settings, else 443 (when HTTP is on 80) or 8443. A new port must be free.
     fn https_port(&self, web: &ServiceInstance) -> Result<u16, Failure> {
-        let all = self
+        let (all, preferred) = self
             .db
-            .read(sites::list)
+            .read(|c| Ok((sites::list(c)?, super::preferences::load(c)?.https_port)))
             .map_err(|e| failure(ErrorCode::Internal, e.to_string()))?;
         if let Some(p) = all
             .iter()
@@ -405,7 +405,15 @@ impl SiteService {
         {
             return Ok(p);
         }
-        let port = if web.port == Some(80) { 443 } else { 8443 };
+        let port = preferred.unwrap_or(if web.port == Some(80) { 443 } else { 8443 });
+        if web.port == Some(i64::from(port)) {
+            return Err(failure(
+                ErrorCode::ValidationError,
+                format!(
+                    "The HTTPS port in Settings ({port}) is the web server's HTTP port. Choose another HTTPS port."
+                ),
+            ));
+        }
         if !crate::platform::windows::ports::is_free(port) {
             let who = crate::platform::windows::ports::listener_owner(port).map_or_else(
                 || "another program".to_owned(),

@@ -1,7 +1,13 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { axeViolations, createMockAdapter, defaultHandlers, renderApp } from "../../test/utils";
+import {
+  axeViolations,
+  createMockAdapter,
+  defaultHandlers,
+  preferencesView,
+  renderApp,
+} from "../../test/utils";
 
 const project = {
   id: "p1",
@@ -104,6 +110,21 @@ describe("sites", () => {
     await userEvent.click((await screen.findAllByRole("button", { name: "Add site" }))[0]!);
     expect(await screen.findByText(/Add a project first/)).toBeInTheDocument();
     expect(screen.getByText(/Create an Nginx service first/)).toBeInTheDocument();
+  });
+
+  it("suggests domains with the suffix chosen in Settings", async () => {
+    await renderApp(
+      "/sites",
+      createMockAdapter({
+        ...defaultHandlers,
+        list_projects: () => [project],
+        list_services: () => [nginx],
+        get_preferences: () => preferencesView({ domainSuffix: "local" }),
+      }),
+    );
+    await userEvent.click((await screen.findAllByRole("button", { name: "Add site" }))[0]!);
+    const form = await screen.findByRole("form", { name: "Add site" });
+    expect(within(form).getByLabelText("Domain")).toHaveValue("my-shop.local");
   });
 
   it("previews the exact changes, explains elevation, then applies what was previewed", async () => {

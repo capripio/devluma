@@ -11,6 +11,8 @@ import { toAppError, type AppError } from "../../lib/ipc/errors";
 import { useAsync } from "../../lib/useAsync";
 import type { ProjectView, SwitchRequest } from "../../types/dto";
 import { RuntimeSwitchDialog } from "../runtimes/RuntimeSwitchDialog";
+import { OpenTerminalButton } from "../terminal/OpenTerminalButton";
+import { terminalOpenedMessage } from "../terminal/terminal";
 
 export function ProjectsPage() {
   const projects = useAsync(ipc.listProjects);
@@ -26,7 +28,12 @@ export function ProjectsPage() {
       <PageHeader
         title="Projects"
         description="Local project folders and the runtime versions each one uses."
-        actions={addButton}
+        actions={
+          <>
+            <OpenTerminalButton />
+            {addButton}
+          </>
+        }
       />
       {adding && (
         <AddProjectForm
@@ -138,14 +145,7 @@ function ProjectsTable({ projects, onChanged }: { projects: ProjectView[]; onCha
   const openTerminal = (p: ProjectView) => {
     setTerminal({ projectId: p.id, message: "Opening…" });
     ipc.openProjectTerminal(p.id).then(
-      (r) =>
-        setTerminal({
-          projectId: p.id,
-          message:
-            r.pathPrefix.length > 0
-              ? `Opened PowerShell with ${r.pathPrefix.join(", ")} first on PATH (that window only).`
-              : "Opened PowerShell. No runtime is selected for this project yet.",
-        }),
+      (r) => setTerminal({ projectId: p.id, message: terminalOpenedMessage(r) }),
       (e: unknown) => setTerminal({ projectId: p.id, error: toAppError(e) }),
     );
   };

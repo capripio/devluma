@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "2026.10.3",
+  "catalogVersion": "2026.10.4",
   "packages": [
     {
       "id": "php",
@@ -571,6 +571,46 @@
             }
           ],
           "releaseDate": "2026-09-03"
+        }
+      ]
+    },
+    {
+      "id": "cmder",
+      "displayName": "Cmder",
+      "category": "tool",
+      "description": "Portable console for Windows (ConEmu + Clink). Used for \"Open terminal\" when chosen in Settings.",
+      "publisher": "Cmder contributors (cmderdev/cmder)",
+      "homepageUrl": "https://cmder.app/",
+      "license": {
+        "id": "MIT",
+        "url": "https://github.com/cmderdev/cmder/blob/master/LICENSE"
+      },
+      "adapter": "cmder",
+      "allowedHosts": [
+        "github.com",
+        "release-assets.githubusercontent.com",
+        "objects.githubusercontent.com"
+      ],
+      "versions": [
+        {
+          "version": "1.3.25",
+          "architecture": "x64",
+          "source": {
+            "url": "https://github.com/cmderdev/cmder/releases/download/v1.3.25/cmder_mini.zip",
+            "archive": "zip",
+            "sizeBytes": 12293846
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "c0611777a5bee9952cfb0439bd903efe49248de99823a3127563c55e7fa1a5d8"
+          },
+          "executables": [
+            {
+              "path": "Cmder.exe",
+              "expectedVersion": "1.3.25"
+            }
+          ],
+          "releaseDate": "2024-05-31"
         }
       ]
     }

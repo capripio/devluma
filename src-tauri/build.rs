@@ -86,6 +86,12 @@ fn main() {
                 "remove_certificate_trust",
                 "renew_certificate",
                 "delete_certificate",
+                "get_preferences",
+                "set_preferences",
+                "set_launch_at_login",
+                "open_terminal",
+                "get_storage_usage",
+                "open_storage_folder",
             ])),
     )
     .expect("failed to run tauri-build");

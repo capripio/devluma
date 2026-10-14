@@ -326,10 +326,94 @@ pub fn relocate(db: &Database, root: &Path) -> DbResult<RelocationReport> {
     Ok(report)
 }
 
+/// Size of one of Devluma's folders, for Settings → Storage.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FolderUsage {
+    pub key: &'static str,
+    pub path: String,
+    pub bytes: u64,
+    pub files: u64,
+}
+
+/// Devluma's folders under the storage root, by key.
+pub fn folders(paths: &crate::state::DataPaths) -> [(&'static str, PathBuf); 6] {
+    [
+        ("packages", paths.packages.clone()),
+        ("data", paths.data.clone()),
+        ("backups", paths.backups.clone()),
+        ("services", paths.services.clone()),
+        ("staging", paths.staging.clone()),
+        ("temp", paths.root.join("tmp")),
+    ]
+}
+
+/// Sizes of `folders`. Junctions and symlinks are never followed.
+pub fn usage(paths: &crate::state::DataPaths) -> Vec<FolderUsage> {
+    folders(paths)
+        .into_iter()
+        .map(|(key, path)| {
+            let (bytes, files) = folder_size(&path);
+            FolderUsage {
+                key,
+                path: path.display().to_string(),
+                bytes,
+                files,
+            }
+        })
+        .collect()
+}
+
+fn folder_size(dir: &Path) -> (u64, u64) {
+    let (mut bytes, mut files) = (0, 0);
+    let mut stack = vec![dir.to_path_buf()];
+    while let Some(d) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&d) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            let Ok(meta) = std::fs::symlink_metadata(entry.path()) else {
+                continue;
+            };
+            if meta.is_dir() && !is_reparse_point(&meta) {
+                stack.push(entry.path());
+            } else if meta.is_file() {
+                bytes += meta.len();
+                files += 1;
+            }
+        }
+    }
+    (bytes, files)
+}
+
+fn is_reparse_point(meta: &std::fs::Metadata) -> bool {
+    use std::os::windows::fs::MetadataExt;
+    const FILE_ATTRIBUTE_REPARSE_POINT: u32 = 0x400;
+    meta.file_attributes() & FILE_ATTRIBUTE_REPARSE_POINT != 0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::persistence::test_support::db;
+
+    #[test]
+    fn usage_counts_files_and_skips_missing_folders() {
+        let dir = tempfile::tempdir().unwrap();
+        let paths = crate::state::DataPaths::under(dir.path());
+        std::fs::create_dir_all(paths.packages.join("php").join("8.5")).unwrap();
+        std::fs::write(
+            paths.packages.join("php").join("8.5").join("php.exe"),
+            [0u8; 100],
+        )
+        .unwrap();
+        std::fs::write(paths.packages.join("a.txt"), [0u8; 20]).unwrap();
+        let u = usage(&paths);
+        let packages = u.iter().find(|f| f.key == "packages").unwrap();
+        assert_eq!((packages.bytes, packages.files), (120, 2));
+        let data = u.iter().find(|f| f.key == "data").unwrap();
+        assert_eq!((data.bytes, data.files), (0, 0));
+    }
 
     #[test]
     fn prefixes_are_replaced_only_at_path_boundaries() {

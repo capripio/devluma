@@ -1,3 +1,5 @@
+import type { DefaultPorts } from "../../types/dto";
+
 /**
  * What the add-service form needs to know per package: default ports and what to tell the
  * user before creating it. The backend validates everything again (and owns the real rules).
@@ -42,6 +44,24 @@ const PACKAGES: Record<string, ServicePackageInfo> = {
   },
 };
 
-export function servicePackageInfo(packageId: string): ServicePackageInfo {
-  return PACKAGES[packageId] ?? { defaultName: "service", defaultPort: 8080 };
+/** Package ids whose default ports are set in Settings (keys of `DefaultPorts`). */
+const PORT_SETTING: Partial<Record<string, keyof DefaultPorts>> = {
+  nginx: "nginx",
+  apache: "apache",
+  mariadb: "mariadb",
+  postgresql: "postgresql",
+  mongodb: "mongodb",
+  mailpit: "mailpit",
+};
+
+/** Info for `packageId`, with the default ports chosen in Settings when given. */
+export function servicePackageInfo(packageId: string, ports?: DefaultPorts): ServicePackageInfo {
+  const info = PACKAGES[packageId] ?? { defaultName: "service", defaultPort: 8080 };
+  const key = PORT_SETTING[packageId];
+  if (!ports || !key) return info;
+  return {
+    ...info,
+    defaultPort: ports[key],
+    adminPort: info.adminPort && { ...info.adminPort, default: ports.mailpitWeb },
+  };
 }

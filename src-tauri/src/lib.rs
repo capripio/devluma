@@ -91,6 +91,12 @@ fn build_app<R: tauri::Runtime>(
             commands::certificates::remove_certificate_trust,
             commands::certificates::renew_certificate,
             commands::certificates::delete_certificate,
+            commands::settings::get_preferences,
+            commands::settings::set_preferences,
+            commands::settings::set_launch_at_login,
+            commands::settings::open_terminal,
+            commands::settings::get_storage_usage,
+            commands::settings::open_storage_folder,
         ])
         .build(context)?;
     let dir = match data_dir {
@@ -106,6 +112,17 @@ fn build_app<R: tauri::Runtime>(
         // Re-adopt services still running from a previous session, then keep checking health.
         sup.reconcile();
         sup.spawn_health_loop(std::time::Duration::from_secs(10));
+        // Settings → Startup: services chosen to start with Devluma. Each start is a
+        // journaled operation; ones already running (re-adopted above) are skipped.
+        let start: Vec<String> = state
+            .db()
+            .ok()
+            .and_then(|db| db.read(services::preferences::load).ok())
+            .map(|p| p.start_services)
+            .unwrap_or_default();
+        for id in start {
+            let _ = sup.start(&id);
+        }
     }
     app.manage(state);
     Ok(app)
@@ -139,9 +156,13 @@ pub fn run() {
         .first()
         .cloned()
         .expect("main window config");
-    tauri::WebviewWindowBuilder::from_config(app.handle(), &main)
+    let window = tauri::WebviewWindowBuilder::from_config(app.handle(), &main)
         .and_then(|b| b.data_directory(webview).build())
         .expect("error creating the main window");
+    // Started by "Start with Windows": stay out of the way until the user opens it.
+    if std::env::args().any(|a| a == platform::windows::autostart::AUTOSTART_ARG) {
+        let _ = window.minimize();
+    }
     app.run(|app, event| {
         // ADR 0006 default: Devluma stops the services it owns when it exits.
         // Tunnels always stop (their jobs would also end when Devluma's handles close).

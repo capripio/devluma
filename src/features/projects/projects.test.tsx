@@ -249,11 +249,29 @@ describe("projects", () => {
       createMockAdapter({
         ...defaultHandlers,
         list_projects: () => [project()],
-        open_project_terminal: () => ({ pathPrefix: ["C:\\Devluma\\packages\\php\\8.4.26-x64"] }),
+        open_project_terminal: () => ({
+          program: "cmder",
+          pathPrefix: ["C:\\Devluma\\packages\\php\\8.4.26-x64"],
+        }),
       }),
     );
     await userEvent.click(await screen.findByRole("button", { name: "Open terminal for Shop" }));
-    expect(await screen.findByText(/8\.4\.26-x64 first on PATH \(that window only\)/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Opened Cmder with .*8\.4\.26-x64 first on PATH \(that window only\)/),
+    ).toBeInTheDocument();
+  });
+
+  it("opens a terminal outside projects with the default runtimes", async () => {
+    const mock = createMockAdapter({
+      ...defaultHandlers,
+      open_terminal: () => ({ program: "power_shell", pathPrefix: [] }),
+    });
+    await renderApp("/projects", mock);
+    await userEvent.click(await screen.findByRole("button", { name: "Open terminal" }));
+    expect(
+      await screen.findByText("Opened Windows PowerShell. No runtime is selected yet."),
+    ).toBeInTheDocument();
+    expect(mock.calls.some((c) => c.command === "open_terminal")).toBe(true);
   });
 });
 

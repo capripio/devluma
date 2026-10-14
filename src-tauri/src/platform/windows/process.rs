@@ -97,18 +97,27 @@ pub fn run_captured_with_input(
 
 const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
 
-/// Opens an interactive Windows PowerShell window in `cwd` with `path_prefix` placed first on
-/// PATH for that window only (ADR 0009: no global PATH changes). Fixed executable and
-/// arguments; nothing user-supplied is put on the command line. The window belongs to the
-/// user and is not tracked or stopped by Devluma.
-pub fn open_terminal(cwd: &Path, path_prefix: &[String]) -> std::io::Result<()> {
-    let system_root = std::env::var_os("SystemRoot")
-        .ok_or_else(|| std::io::Error::other("SystemRoot is not set"))?;
-    let powershell = Path::new(&system_root)
-        .join("System32")
-        .join("WindowsPowerShell")
-        .join("v1.0")
-        .join("powershell.exe");
+/// Which program an "Open terminal" action starts (ADR 0015).
+pub enum TerminalLauncher<'a> {
+    PowerShell,
+    CommandPrompt,
+    /// A Devluma-installed Cmder. `config_root` is passed as `/C` so Cmder keeps its user
+    /// settings there instead of inside the package folder.
+    Cmder {
+        exe: &'a Path,
+        config_root: &'a Path,
+    },
+}
+
+/// Opens an interactive terminal window in `cwd` with `path_prefix` placed first on PATH for
+/// that window only (ADR 0009: no global PATH changes). Fixed executables and arguments; the
+/// only paths on a command line are `cwd` and Devluma's own folders, passed as separate
+/// arguments. The window belongs to the user and is not tracked or stopped by Devluma.
+pub fn open_terminal(
+    launcher: &TerminalLauncher,
+    cwd: &Path,
+    path_prefix: &[String],
+) -> std::io::Result<()> {
     let mut path = std::ffi::OsString::new();
     for dir in path_prefix {
         path.push(dir);
@@ -117,13 +126,38 @@ pub fn open_terminal(cwd: &Path, path_prefix: &[String]) -> std::io::Result<()> 
     if let Some(existing) = std::env::var_os("PATH") {
         path.push(existing);
     }
-    Command::new(powershell)
-        .args(["-NoLogo", "-NoExit"])
-        .current_dir(cwd)
-        .env("PATH", path)
-        .creation_flags(CREATE_NEW_CONSOLE)
-        .spawn()
-        .map(|_| ())
+    let system32 = || -> std::io::Result<std::path::PathBuf> {
+        std::env::var_os("SystemRoot")
+            .map(|r| Path::new(&r).join("System32"))
+            .ok_or_else(|| std::io::Error::other("SystemRoot is not set"))
+    };
+    let mut cmd = match launcher {
+        TerminalLauncher::PowerShell => {
+            let mut c = Command::new(
+                system32()?
+                    .join("WindowsPowerShell")
+                    .join("v1.0")
+                    .join("powershell.exe"),
+            );
+            c.args(["-NoLogo", "-NoExit"])
+                .creation_flags(CREATE_NEW_CONSOLE);
+            c
+        }
+        TerminalLauncher::CommandPrompt => {
+            let mut c = Command::new(system32()?.join("cmd.exe"));
+            c.creation_flags(CREATE_NEW_CONSOLE);
+            c
+        }
+        // Cmder.exe starts ConEmu with its own environment (a new ConEmu process each time:
+        // the bundled ConEmu.xml has SingleInstance off), so PATH reaches the shell.
+        TerminalLauncher::Cmder { exe, config_root } => {
+            std::fs::create_dir_all(config_root)?;
+            let mut c = Command::new(exe);
+            c.arg("/C").arg(config_root).arg("/START").arg(cwd);
+            c
+        }
+    };
+    cmd.current_dir(cwd).env("PATH", path).spawn().map(|_| ())
 }
 
 /// Opens an `http://` URL in the user's default browser. Callers construct the URL from

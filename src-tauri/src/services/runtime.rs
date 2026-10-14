@@ -382,8 +382,7 @@ pub fn verify_installation(
                 exe.path, inst.install_path
             ));
         }
-        let output = probe
-            .run(&path, pkg.adapter.version_probe().args)
+        let output = super::install::probe_output(&**probe, pkg.adapter, &path)
             .map_err(|e| format!("Could not run {}: {e}", exe.path))?;
         match pkg.adapter.parse_version(&output) {
             Some(v) if v == exe.expected_version => {}
@@ -418,10 +417,19 @@ pub fn project_path_prefix(
     catalog: &Catalog,
     project_id: &str,
 ) -> DbResult<Vec<String>> {
+    path_prefix(db, catalog, Some(project_id))
+}
+
+/// Like `project_path_prefix`; `None` uses the global defaults (a terminal outside projects).
+pub fn path_prefix(
+    db: &Database,
+    catalog: &Catalog,
+    project_id: Option<&str>,
+) -> DbResult<Vec<String>> {
     db.read(|c| {
         let mut dirs = Vec::new();
         for pkg in &catalog.packages {
-            if let Some(sel) = effective(c, Some(project_id), &pkg.manifest.id)? {
+            if let Some(sel) = effective(c, project_id, &pkg.manifest.id)? {
                 let root = std::path::Path::new(&sel.install_path);
                 for sub in pkg.adapter.path_dirs() {
                     dirs.push(

@@ -4,9 +4,10 @@ use serde::Serialize;
 use tauri::State;
 
 use super::blocking;
-use crate::error::{ErrorCode, IpcError, IpcResult};
+use crate::error::IpcResult;
 use crate::persistence::projects::{self, Project};
 use crate::services::runtime::{self, Selection};
+use crate::services::terminal::{self, TerminalOpened};
 use crate::state::AppState;
 
 #[derive(Debug, Clone, Serialize)]
@@ -86,42 +87,13 @@ pub async fn remove_project(state: State<'_, AppState>, project_id: String) -> I
     blocking(move || Ok(db.write(|c| projects::remove(c, &project_id))?)).await
 }
 
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TerminalOpened {
-    pub path_prefix: Vec<String>,
-}
-
-/// Opens PowerShell in the project folder with its runtimes first on PATH (that window only).
+/// Opens the terminal chosen in Settings in the project folder, with its runtimes first on
+/// PATH (that window only).
 #[tauri::command]
 pub async fn open_project_terminal(
     state: State<'_, AppState>,
     project_id: String,
 ) -> IpcResult<TerminalOpened> {
-    let (db, catalog) = (state.db()?, Arc::clone(&state.catalog));
-    blocking(move || {
-        let project = db.read(|c| projects::get(c, &project_id))?;
-        let cwd = std::path::PathBuf::from(&project.root_path);
-        if !cwd.is_dir() {
-            return Err(IpcError::new(
-                ErrorCode::ValidationError,
-                format!("The project folder {} no longer exists.", project.root_path),
-                false,
-            ));
-        }
-        let mut path_prefix = runtime::project_path_prefix(&db, &catalog, &project.id)?;
-        // An activated-like venv: its Scripts folder wins over the selected Python.
-        if let Some(venv) = crate::services::projects::detect(&cwd).virtual_env_scripts {
-            path_prefix.insert(0, venv);
-        }
-        crate::platform::windows::process::open_terminal(&cwd, &path_prefix).map_err(|_| {
-            IpcError::new(
-                ErrorCode::Internal,
-                "Could not open a terminal window.",
-                true,
-            )
-        })?;
-        Ok(TerminalOpened { path_prefix })
-    })
-    .await
+    let (db, catalog, paths) = (state.db()?, Arc::clone(&state.catalog), state.paths.clone());
+    blocking(move || terminal::open(&db, &catalog, &paths, Some(&project_id))).await
 }

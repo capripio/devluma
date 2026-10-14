@@ -17,6 +17,8 @@ pub enum AdapterId {
     Postgresql,
     Mongodb,
     Apache,
+    /// Cmder console (a terminal, not a runtime or service; ADR 0015).
+    Cmder,
     /// Deterministic test package; never accepted outside `cfg(test)`.
     #[cfg(test)]
     Fixture,
@@ -53,6 +55,7 @@ impl AdapterId {
             "postgresql" => Some(Self::Postgresql),
             "mongodb" => Some(Self::Mongodb),
             "apache" => Some(Self::Apache),
+            "cmder" => Some(Self::Cmder),
             #[cfg(test)]
             "fixture" => Some(Self::Fixture),
             _ => None,
@@ -70,6 +73,7 @@ impl AdapterId {
             Self::Postgresql => "postgresql",
             Self::Mongodb => "mongodb",
             Self::Apache => "apache",
+            Self::Cmder => "cmder",
             #[cfg(test)]
             Self::Fixture => "fixture",
         }
@@ -122,6 +126,12 @@ impl AdapterId {
                 args: &["-v"],
                 pattern: r"^Server version: Apache/(\d+\.\d+\.\d+) ",
             },
+            // Cmder.exe is a GUI launcher: never run it to probe. Its version resource is
+            // read instead (see `reads_version_resource`), e.g. "FileVersion 1.3.25.328".
+            Self::Cmder => VersionProbe {
+                args: &[],
+                pattern: r"^FileVersion (\d+\.\d+\.\d+)\.\d+$",
+            },
             #[cfg(test)]
             Self::Fixture => VersionProbe {
                 args: &["--version"],
@@ -137,7 +147,7 @@ impl AdapterId {
             Self::Php => Some(ServiceRole::FastCgi),
             Self::Mailpit => Some(ServiceRole::Mail),
             Self::Postgresql | Self::Mongodb => Some(ServiceRole::Database),
-            Self::Node | Self::Python => None,
+            Self::Node | Self::Python | Self::Cmder => None,
             #[cfg(test)]
             Self::Fixture => Some(ServiceRole::WebServer),
         }
@@ -158,7 +168,8 @@ impl AdapterId {
             | Self::Node
             | Self::Python
             | Self::Mailpit
-            | Self::Mongodb => &[],
+            | Self::Mongodb
+            | Self::Cmder => &[],
             // EDB's PostgreSQL builds link against the VC++ runtime but don't ship it.
             Self::Postgresql => &[("vcruntime140.dll", VC_REDIST), ("msvcp140.dll", VC_REDIST)],
             #[cfg(test)]
@@ -172,8 +183,16 @@ impl AdapterId {
             // The NuGet package keeps the interpreter in `tools/`; pip puts commands in
             // `tools/Scripts` once something is installed.
             Self::Python => &["tools", r"tools\Scripts"],
+            // A terminal program, not a tool to run from one.
+            Self::Cmder => &[],
             _ => &[""],
         }
+    }
+
+    /// True when the version comes from the executable's version resource rather than its
+    /// output (the probe then reports `FileVersion <a.b.c.d>`).
+    pub fn reads_version_resource(self) -> bool {
+        matches!(self, Self::Cmder)
     }
 
     /// Extracts the version from probe output, if it matches this adapter's format.
@@ -192,6 +211,21 @@ mod tests {
         assert_eq!(AdapterId::parse("php"), Some(AdapterId::Php));
         assert_eq!(AdapterId::parse("PHP"), None);
         assert_eq!(AdapterId::parse("shell"), None);
+    }
+
+    #[test]
+    fn cmder_reads_its_version_resource() {
+        assert!(AdapterId::Cmder.reads_version_resource());
+        assert!(!AdapterId::Php.reads_version_resource());
+        assert_eq!(
+            AdapterId::Cmder
+                .parse_version("FileVersion 1.3.25.328")
+                .as_deref(),
+            Some("1.3.25")
+        );
+        assert_eq!(AdapterId::Cmder.parse_version("1.3.25.328"), None);
+        assert_eq!(AdapterId::Cmder.service_role(), None);
+        assert!(AdapterId::Cmder.path_dirs().is_empty());
     }
 
     #[test]

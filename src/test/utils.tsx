@@ -95,6 +95,8 @@ export const defaultHandlers: Record<string, (args?: Record<string, unknown>) =>
     catalogVersion: "2026.10.3",
     pendingCatalogVersion: null,
   }),
+  get_preferences: () => preferencesView(),
+  get_storage_usage: () => ({ root: String.raw`C:\Devluma`, folders: [] }),
   get_ngrok_status: () => ({ path: null, version: null, problem: null, tokenSaved: false, detected: [] }),
   get_hosts: () => ({
     path: String.raw`C:\Windows\System32\drivers\etc\hosts`,
@@ -193,4 +195,36 @@ export async function renderApp(path = "/", mock = createMockAdapter(defaultHand
 export async function axeViolations(container: Element) {
   const results = await axe.run(container, { rules: { "color-contrast": { enabled: false } } });
   return results.violations.map((v) => `${v.id}: ${v.help} (${v.nodes.length})`);
+}
+
+/** A `PreferencesView` with the defaults, plus overridable preferences and view fields. */
+export function preferencesView(
+  preferences: Record<string, unknown> = {},
+  overrides: Record<string, unknown> = {},
+) {
+  return {
+    preferences: {
+      domainSuffix: "test",
+      httpsPort: null,
+      terminal: "power_shell",
+      defaultPorts: {
+        nginx: 8080,
+        apache: 8081,
+        mariadb: 3306,
+        postgresql: 5432,
+        mongodb: 27017,
+        mailpit: 1025,
+        mailpitWeb: 8025,
+      },
+      startServices: [],
+      downloadTimeouts: { connectSecs: 15, idleSecs: 30 },
+      ...preferences,
+    },
+    suggestedSuffixes: ["test", "localhost", "internal", "local"],
+    suffixAdvice: { httpsSupported: true, warnings: [] as string[] },
+    cmderInstalled: false,
+    launchAtLogin: "off",
+    launchAtLoginSupported: true,
+    ...overrides,
+  };
 }

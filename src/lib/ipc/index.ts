@@ -32,6 +32,11 @@ import {
   serviceStatusSchema,
   serviceViewSchema,
   startupStatusSchema,
+  launchAtLoginSchema,
+  preferencesViewSchema,
+  storageUsageSchema,
+  terminalOpenedSchema,
+  type Preferences,
   switchPreviewSchema,
   type Architecture,
   type CreateServiceRequest,
@@ -99,7 +104,8 @@ export const ipc = {
     call("create_project", { name, rootPath }, projectSchema),
   removeProject: (projectId: string) => call("remove_project", { projectId }, z.null()),
   openProjectTerminal: (projectId: string) =>
-    call("open_project_terminal", { projectId }, z.object({ pathPrefix: z.array(z.string()) })),
+    call("open_project_terminal", { projectId }, terminalOpenedSchema),
+  openTerminal: () => call("open_terminal", undefined, terminalOpenedSchema),
   listServices: () => call("list_services", undefined, z.array(serviceViewSchema)),
   createService: (request: CreateServiceRequest) =>
     call("create_service", { request }, operationStartedSchema),
@@ -167,6 +173,12 @@ export const ipc = {
     call("apply_hosts_change", { request }, operationStartedSchema),
   removeService: (serviceId: string) =>
     call("remove_service", { serviceId }, z.object({ keptDataPath: z.string().nullable() })),
+  getPreferences: () => call("get_preferences", undefined, preferencesViewSchema),
+  setPreferences: (preferences: Preferences) =>
+    call("set_preferences", { preferences }, preferencesViewSchema),
+  setLaunchAtLogin: (enabled: boolean) => call("set_launch_at_login", { enabled }, launchAtLoginSchema),
+  getStorageUsage: () => call("get_storage_usage", undefined, storageUsageSchema),
+  openStorageFolder: (key: string) => call("open_storage_folder", { key }, z.null()),
 };
 
 export const events = {
