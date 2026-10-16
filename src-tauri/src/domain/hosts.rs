@@ -1,22 +1,25 @@
-//! Windows hosts file model (app_flow.md §10, ADR 0007).
+//! Windows hosts file model (app_flow.md §10, ADR 0007, ADR 0016).
 //!
-//! Devluma only ever edits its own marked block:
+//! Devluma only ever edits its own lines, recognised by a trailing tag:
 //!
 //! ```text
-//! # BEGIN Devluma (managed entries; edit them in Devluma)
-//! 127.0.0.1 shop.test
-//! # END Devluma
+//! 127.0.0.1    shop.test    # managed by devluma      (tab-separated in the file)
 //! ```
 //!
-//! Every other byte of the file — comments, external entries, blank lines, line endings —
-//! is preserved exactly. Managed entries may only point at loopback addresses.
+//! A tagged line counts as Devluma's only when it points at a loopback address; a tag on any
+//! other mapping is reported and never touched. Every other byte of the file — comments,
+//! other entries (including an old `# BEGIN Devluma` block), blank lines, line endings — is
+//! preserved exactly.
 
+use std::collections::BTreeMap;
 use std::net::IpAddr;
 
 use serde::{Deserialize, Serialize};
 
-pub const BEGIN: &str = "# BEGIN Devluma (managed entries; edit them in Devluma)";
-pub const END: &str = "# END Devluma";
+/// The comment that marks Devluma's lines (compared case-insensitively, spaces trimmed).
+pub const MARKER: &str = "managed by devluma";
+/// How Devluma writes its tag.
+pub const TAG: &str = "# managed by devluma";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -41,23 +44,19 @@ pub struct HostsFile {
     /// Original text, unchanged.
     pub text: String,
     pub entries: Vec<HostsLine>,
-    /// Line index range `[begin, end]` of the managed block, inclusive of markers.
-    block: Option<(usize, usize)>,
+    /// Lines carrying Devluma's tag on a non-loopback address: reported, never edited.
+    pub stray_tags: Vec<HostsLine>,
     newline: &'static str,
 }
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
 pub enum HostsError {
-    #[error(
-        "the hosts file has a Devluma section without a matching end marker; fix it manually first"
-    )]
-    UnbalancedBlock,
     #[error("{0} is not a loopback address; Devluma only maps domains to this computer")]
     NotLoopback(String),
     #[error("invalid domain {0}: {1}")]
     InvalidDomain(String, String),
     #[error(
-        "{domain} is already mapped to {ip} outside Devluma's section (line {line}); change or remove that line first"
+        "{domain} is already mapped to {ip} by another line (line {line}); change or remove that line first"
     )]
     ExternalConflict {
         domain: String,
@@ -66,43 +65,48 @@ pub enum HostsError {
     },
 }
 
+fn is_tag(comment: Option<&str>) -> bool {
+    comment.is_some_and(|c| c.trim().eq_ignore_ascii_case(MARKER))
+}
+
 impl HostsFile {
-    pub fn parse(text: &str) -> Result<Self, HostsError> {
+    pub fn parse(text: &str) -> Self {
         let newline = if text.contains("\r\n") { "\r\n" } else { "\n" };
-        let lines: Vec<&str> = text.lines().collect();
-        let begin = lines.iter().position(|l| l.trim() == BEGIN);
-        let end = lines.iter().position(|l| l.trim() == END);
-        let block = match (begin, end) {
-            (None, None) => None,
-            (Some(b), Some(e)) if e > b => Some((b, e)),
-            _ => return Err(HostsError::UnbalancedBlock),
-        };
         let mut entries = Vec::new();
-        for (i, raw) in lines.iter().enumerate() {
+        let mut stray_tags = Vec::new();
+        for (i, raw) in text.lines().enumerate() {
             let (content, comment) = match raw.split_once('#') {
                 Some((c, rest)) => (c, Some(rest.trim().to_owned()).filter(|s| !s.is_empty())),
-                None => (*raw, None),
+                None => (raw, None),
             };
             let mut parts = content.split_whitespace();
             let Some(ip) = parts.next() else { continue };
             let hostnames: Vec<String> = parts.map(|h| h.to_lowercase()).collect();
-            if hostnames.is_empty() || ip.parse::<IpAddr>().is_err() {
+            let Ok(addr) = ip.parse::<IpAddr>() else {
+                continue;
+            };
+            if hostnames.is_empty() {
                 continue;
             }
-            entries.push(HostsLine {
+            let tagged = is_tag(comment.as_deref());
+            let line = HostsLine {
                 line: i + 1,
                 ip: ip.to_owned(),
                 hostnames,
                 comment,
-                managed: block.is_some_and(|(b, e)| i > b && i < e),
-            });
+                managed: tagged && addr.is_loopback(),
+            };
+            if tagged && !addr.is_loopback() {
+                stray_tags.push(line.clone());
+            }
+            entries.push(line);
         }
-        Ok(Self {
+        Self {
             text: text.to_owned(),
             entries,
-            block,
+            stray_tags,
             newline,
-        })
+        }
     }
 
     pub fn managed(&self) -> Vec<ManagedEntry> {
@@ -118,8 +122,14 @@ impl HostsFile {
             .collect()
     }
 
-    /// The file with Devluma's block replaced by `entries` (removed if empty). Everything
-    /// outside the block is copied verbatim.
+    /// Lines in the file that aren't Devluma's (for "Devluma leaves N entries alone").
+    pub fn other_count(&self) -> usize {
+        self.entries.iter().filter(|e| !e.managed).count()
+    }
+
+    /// The file with Devluma's tagged lines set to exactly `entries`: kept lines stay where
+    /// they are (normalised), dropped ones are removed, new ones are appended. Every untagged
+    /// byte is copied verbatim.
     pub fn with_managed(&self, entries: &[ManagedEntry]) -> Result<String, HostsError> {
         let entries = validate(entries)?;
         for entry in &entries {
@@ -137,41 +147,43 @@ impl HostsFile {
             }
         }
         let nl = self.newline;
-        let mut block = String::new();
-        if !entries.is_empty() {
-            block.push_str(BEGIN);
-            block.push_str(nl);
-            for e in &entries {
-                block.push_str(&format!("{} {}{nl}", e.ip, e.domain));
-            }
-            block.push_str(END);
-            block.push_str(nl);
-        }
+        let mut remaining: BTreeMap<&str, &str> = entries
+            .iter()
+            .map(|e| (e.domain.as_str(), e.ip.as_str()))
+            .collect();
+        let managed_lines: BTreeMap<usize, &HostsLine> = self
+            .entries
+            .iter()
+            .filter(|e| e.managed)
+            .map(|e| (e.line, e))
+            .collect();
 
-        // Split the original into raw lines keeping their terminators.
-        let raw: Vec<&str> = self.text.split_inclusive('\n').collect();
-        let mut out = String::with_capacity(self.text.len() + block.len());
-        match self.block {
-            Some((b, e)) => {
-                for l in &raw[..b] {
-                    out.push_str(l);
-                }
-                out.push_str(&block);
-                for l in &raw[e + 1..] {
-                    out.push_str(l);
+        let mut out = String::with_capacity(self.text.len() + entries.len() * 48);
+        for (i, raw) in self.text.split_inclusive('\n').enumerate() {
+            let Some(line) = managed_lines.get(&(i + 1)) else {
+                out.push_str(raw);
+                continue;
+            };
+            for host in &line.hostnames {
+                if let Some(ip) = remaining.remove(host.as_str()) {
+                    out.push_str(&tagged_line(ip, host, nl));
                 }
             }
-            None if entries.is_empty() => out.push_str(&self.text),
-            None => {
-                out.push_str(&self.text);
-                if !self.text.is_empty() && !self.text.ends_with('\n') {
-                    out.push_str(nl);
-                }
-                out.push_str(&block);
+        }
+        if !remaining.is_empty() {
+            if !out.is_empty() && !out.ends_with('\n') {
+                out.push_str(nl);
+            }
+            for (domain, ip) in remaining {
+                out.push_str(&tagged_line(ip, domain, nl));
             }
         }
         Ok(out)
     }
+}
+
+fn tagged_line(ip: &str, domain: &str, nl: &str) -> String {
+    format!("{ip}\t{domain}\t{TAG}{nl}")
 }
 
 /// Normalizes, de-duplicates (by domain) and validates managed entries.
@@ -220,17 +232,17 @@ mod tests {
     }
 
     #[test]
-    fn adds_a_block_and_preserves_everything_else_byte_for_byte() {
-        let f = HostsFile::parse(WINDOWS_DEFAULT).unwrap();
+    fn appends_tagged_lines_and_preserves_everything_else_byte_for_byte() {
+        let f = HostsFile::parse(WINDOWS_DEFAULT);
         let out = f.with_managed(&[entry("Shop.test")]).unwrap();
-        assert!(out.starts_with(WINDOWS_DEFAULT), "original text untouched");
-        assert!(
-            out.ends_with(&format!("{BEGIN}\r\n127.0.0.1 shop.test\r\n{END}\r\n")),
-            "CRLF kept: {out:?}"
+        assert_eq!(
+            out,
+            format!("{WINDOWS_DEFAULT}127.0.0.1\tshop.test\t# managed by devluma\r\n"),
+            "CRLF kept"
         );
 
-        // Round trip: replacing the block keeps the rest and is idempotent.
-        let f2 = HostsFile::parse(&out).unwrap();
+        // Round trip: rewriting the same entries is idempotent.
+        let f2 = HostsFile::parse(&out);
         assert_eq!(f2.managed(), vec![entry("shop.test")]);
         assert_eq!(f2.with_managed(&f2.managed()).unwrap(), out);
 
@@ -239,36 +251,71 @@ mod tests {
     }
 
     #[test]
-    fn replaces_only_the_block_in_the_middle_of_a_file() {
-        let text = format!(
-            "10.0.0.5 nas.lan # my NAS\n{BEGIN}\n127.0.0.1 old.test\n{END}\n# trailing comment\n"
-        );
-        let f = HostsFile::parse(&text).unwrap();
-        assert_eq!(f.entries.len(), 2);
-        assert!(!f.entries[0].managed && f.entries[1].managed);
-        assert_eq!(f.entries[0].comment.as_deref(), Some("my NAS"));
-        let out = f.with_managed(&[entry("a.test"), entry("b.test")]).unwrap();
+    fn edits_tagged_lines_in_place_and_leaves_other_lines_alone() {
+        let text = "10.0.0.5 nas.lan # my NAS\n127.0.0.1   old.test   #Managed By Devluma\n127.0.0.1 child.local #laragon magic!\n# trailing comment\n127.0.0.1 keep.test # managed by devluma\n";
+        let f = HostsFile::parse(text);
+        assert_eq!(f.other_count(), 2);
+        assert_eq!(f.managed(), vec![entry("old.test"), entry("keep.test")]);
+        let out = f
+            .with_managed(&[entry("keep.test"), entry("new.test")])
+            .unwrap();
         assert_eq!(
             out,
-            format!(
-                "10.0.0.5 nas.lan # my NAS\n{BEGIN}\n127.0.0.1 a.test\n127.0.0.1 b.test\n{END}\n# trailing comment\n"
-            )
+            "10.0.0.5 nas.lan # my NAS\n127.0.0.1 child.local #laragon magic!\n# trailing comment\n127.0.0.1\tkeep.test\t# managed by devluma\n127.0.0.1\tnew.test\t# managed by devluma\n"
+        );
+    }
+
+    #[test]
+    fn similar_comments_are_not_the_tag() {
+        let f = HostsFile::parse(
+            "127.0.0.1 a.test # managed by devluma-old\n127.0.0.1 b.test # devluma\n127.0.0.1 c.test #laragon magic!\n",
+        );
+        assert!(f.managed().is_empty());
+        assert_eq!(f.other_count(), 3);
+    }
+
+    #[test]
+    fn a_tag_on_a_real_address_is_reported_and_never_edited() {
+        let text = "10.0.0.7 nas.test # managed by devluma\n";
+        let f = HostsFile::parse(text);
+        assert!(f.managed().is_empty());
+        assert_eq!(f.stray_tags.len(), 1);
+        assert_eq!(f.stray_tags[0].line, 1);
+        assert_eq!(f.with_managed(&[]).unwrap(), text);
+    }
+
+    #[test]
+    fn the_old_marked_block_is_left_as_it_is() {
+        let text = "# BEGIN Devluma (managed entries; edit them in Devluma)\n127.0.0.1 old.test\n# END Devluma\n";
+        let f = HostsFile::parse(text);
+        assert!(f.managed().is_empty());
+        let out = f.with_managed(&[entry("new.test")]).unwrap();
+        assert_eq!(
+            out,
+            format!("{text}127.0.0.1\tnew.test\t# managed by devluma\n")
         );
     }
 
     #[test]
     fn handles_files_without_trailing_newline() {
-        let f = HostsFile::parse("127.0.0.1 localhost").unwrap();
+        let f = HostsFile::parse("127.0.0.1 localhost");
         let out = f.with_managed(&[entry("x.test")]).unwrap();
         assert_eq!(
             out,
-            format!("127.0.0.1 localhost\n{BEGIN}\n127.0.0.1 x.test\n{END}\n")
+            "127.0.0.1 localhost\n127.0.0.1\tx.test\t# managed by devluma\n"
         );
     }
 
     #[test]
+    fn a_tagged_line_with_several_names_keeps_only_the_wanted_ones() {
+        let f = HostsFile::parse("127.0.0.1 a.test b.test # managed by devluma\n");
+        let out = f.with_managed(&[entry("b.test")]).unwrap();
+        assert_eq!(out, "127.0.0.1\tb.test\t# managed by devluma\n");
+    }
+
+    #[test]
     fn only_loopback_and_valid_domains() {
-        let f = HostsFile::parse("").unwrap();
+        let f = HostsFile::parse("");
         let bad_ip = ManagedEntry {
             ip: "93.184.216.34".into(),
             domain: "bank.test".into(),
@@ -290,34 +337,25 @@ mod tests {
 
     #[test]
     fn refuses_to_shadow_an_external_mapping() {
-        let f = HostsFile::parse("10.1.2.3 shop.test\n").unwrap();
+        let f = HostsFile::parse("10.1.2.3 shop.test\n");
         assert!(matches!(
             f.with_managed(&[entry("shop.test")]),
             Err(HostsError::ExternalConflict { line: 1, .. })
         ));
-        // Same loopback mapping outside the block is fine (no conflict).
-        let f = HostsFile::parse("127.0.0.1 shop.test\n").unwrap();
+        // Same loopback mapping on someone else's line is fine (no conflict).
+        let f = HostsFile::parse("127.0.0.1 shop.test\n");
         assert!(f.with_managed(&[entry("shop.test")]).is_ok());
     }
 
     #[test]
-    fn unbalanced_markers_are_an_error_not_a_guess() {
-        assert_eq!(
-            HostsFile::parse(&format!("{BEGIN}\n127.0.0.1 a.test\n")),
-            Err(HostsError::UnbalancedBlock)
-        );
-        assert_eq!(
-            HostsFile::parse(&format!("{END}\n{BEGIN}\n")),
-            Err(HostsError::UnbalancedBlock)
-        );
-    }
-
-    #[test]
     fn diff_shows_exact_changes() {
-        let f = HostsFile::parse("127.0.0.1 localhost\n").unwrap();
+        let f = HostsFile::parse("127.0.0.1 localhost\n");
         let out = f.with_managed(&[entry("shop.test")]).unwrap();
         let d = diff(&f.text, &out, "hosts");
-        assert!(d.contains("+127.0.0.1 shop.test"), "{d}");
+        assert!(
+            d.contains("+127.0.0.1\tshop.test\t# managed by devluma"),
+            "{d}"
+        );
         assert!(!d.contains("-127.0.0.1 localhost"));
     }
 }

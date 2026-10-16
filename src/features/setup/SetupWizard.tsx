@@ -7,6 +7,7 @@ import { toAppError, type AppError } from "../../lib/ipc/errors";
 import { formatBytes } from "../../lib/format";
 import { useAsync } from "../../lib/useAsync";
 import type { PackageView, SetupStatus } from "../../types/dto";
+import { LoadingState } from "../../components/LoadingState";
 
 type Step = "welcome" | "storage" | "stack" | "review" | "running";
 
@@ -104,7 +105,7 @@ export function SetupWizard({ status, onDone }: { status: SetupStatus; onDone: (
           ) : catalog.status === "error" ? (
             <ErrorPanel error={catalog.error} onRetry={catalog.reload} />
           ) : (
-            <p role="status">Loading the package catalog…</p>
+            <LoadingState label="Loading the package catalog…" shape="inline" />
           ))}
         {step === "review" && catalog.status === "success" && (
           <Review

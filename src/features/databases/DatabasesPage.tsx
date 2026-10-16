@@ -13,6 +13,7 @@ import { formatBytes } from "../../lib/format";
 import { useAsync } from "../../lib/useAsync";
 import type { BackupRecord, DatabaseServiceView } from "../../types/dto";
 import { RestoreDialog } from "./RestoreDialog";
+import { LoadingState } from "../../components/LoadingState";
 
 const ENGINE_NAMES: Record<DatabaseServiceView["engine"], string> = {
   mariadb: "MariaDB",
@@ -40,11 +41,7 @@ export function DatabasesPage() {
         title="Databases"
         description="Database servers, connection details, backups and restores."
       />
-      {services.status === "pending" && (
-        <p role="status" className="text-sm text-fg-muted">
-          Loading databases…
-        </p>
-      )}
+      {services.status === "pending" && <LoadingState label="Loading databases…" shape="table" columns={5} />}
       {services.status === "error" && <ErrorPanel error={services.error} onRetry={services.reload} />}
       {services.status === "success" &&
         (services.data.length === 0 ? (
@@ -70,7 +67,7 @@ function DatabaseCard({ db, onChanged }: { db: DatabaseServiceView; onChanged: (
   return (
     <section
       aria-labelledby={headingId}
-      className="flex flex-col gap-3 rounded-lg border border-border p-4 text-sm"
+      className="flex flex-col gap-3 rounded-md border border-border p-4 text-sm"
     >
       <h2 id={headingId} className="font-semibold">
         <Link to={`/services/${db.serviceId}`} className="text-accent hover:underline">
@@ -234,7 +231,7 @@ function BackupsTable({
           No backups yet. Backups are kept when services or packages are removed.
         </p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
+        <div className="overflow-x-auto rounded-md border border-border">
           <table className="w-full text-left text-sm">
             <thead className="bg-surface-raised text-fg-muted">
               <tr>

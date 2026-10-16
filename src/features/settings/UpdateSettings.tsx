@@ -6,6 +6,7 @@ import { ipc } from "../../lib/ipc";
 import { toAppError, type AppError } from "../../lib/ipc/errors";
 import { useAsync } from "../../lib/useAsync";
 import type { AppUpdate, UpdateSettings as Settings } from "../../types/dto";
+import { LoadingState } from "../../components/LoadingState";
 
 const input = "rounded-md border border-border bg-surface px-2 py-1.5 font-mono";
 
@@ -15,12 +16,12 @@ export function UpdateSettings() {
   return (
     <section
       aria-labelledby="updates-heading"
-      className="flex flex-col gap-3 rounded-lg border border-border p-4 text-sm"
+      className="flex flex-col gap-3 rounded-md border border-border p-4 text-sm"
     >
       <h2 id="updates-heading" className="font-semibold">
         Updates
       </h2>
-      {settings.status === "pending" && <p role="status">Loading…</p>}
+      {settings.status === "pending" && <LoadingState label="Loading…" shape="inline" />}
       {settings.status === "error" && <ErrorPanel error={settings.error} onRetry={settings.reload} />}
       {settings.status === "success" && <UpdateForm settings={settings.data} onChanged={settings.refresh} />}
     </section>

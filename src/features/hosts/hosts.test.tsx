@@ -7,10 +7,10 @@ const view = {
   path: String.raw`C:\Windows\System32\drivers\etc\hosts`,
   needsElevation: true,
   entries: [
-    { line: 3, ip: "10.0.0.5", hostnames: ["nas.lan"], comment: "my NAS", managed: false },
-    { line: 5, ip: "127.0.0.1", hostnames: ["shop.test"], comment: null, managed: true },
+    { line: 5, ip: "127.0.0.1", hostnames: ["shop.test"], comment: "managed by devluma", managed: true },
   ],
-  raw: "10.0.0.5 nas.lan # my NAS\r\n",
+  otherCount: 4,
+  strayTags: [],
   backups: [
     {
       id: "b1",
@@ -24,7 +24,6 @@ const view = {
       changes: [{ domain: "shop.test", ipAddress: "127.0.0.1", action: "add" }],
     },
   ],
-  problem: null,
 };
 
 const plan = {
@@ -38,21 +37,19 @@ const plan = {
 };
 
 describe("hosts file", () => {
-  it("distinguishes Devluma's entries from everyone else's", async () => {
+  it("shows only Devluma's own entries and leaves the rest of the file alone", async () => {
     const { container } = await renderApp(
       "/hosts",
       createMockAdapter({ ...defaultHandlers, get_hosts: () => view }),
     );
     const table = await screen.findByRole("table");
     const rows = within(table).getAllByRole("row").slice(1);
-    expect(rows[0]).toHaveTextContent("Other / you");
-    expect(within(rows[0]!).queryByRole("button")).not.toBeInTheDocument();
-    expect(rows[1]).toHaveTextContent("Devluma");
-    expect(within(rows[1]!).getByRole("button", { name: "Remove shop.test" })).toBeInTheDocument();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveTextContent("shop.test");
+    expect(within(rows[0]!).getByRole("button", { name: "Remove shop.test" })).toBeInTheDocument();
+    expect(screen.getByText(/leaves the other 4 entries in this file alone/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /raw file/i })).not.toBeInTheDocument();
     expect(await axeViolations(container)).toEqual([]);
-
-    await userEvent.click(screen.getByRole("button", { name: "Show raw file" }));
-    expect(screen.getByLabelText("Raw hosts file")).toHaveTextContent("nas.lan");
   });
 
   it("removes an entry only after showing the exact diff, pinning the previewed file", async () => {
@@ -91,20 +88,27 @@ describe("hosts file", () => {
     });
   });
 
-  it("reports a damaged Devluma section instead of guessing", async () => {
+  it("warns about Devluma's tag on a line that points away from this computer", async () => {
     await renderApp(
       "/hosts",
       createMockAdapter({
         ...defaultHandlers,
         get_hosts: () => ({
           ...view,
-          entries: [],
-          problem: "the hosts file has a Devluma section without a matching end marker",
+          strayTags: [
+            {
+              line: 9,
+              ip: "10.0.0.7",
+              hostnames: ["nas.test"],
+              comment: "managed by devluma",
+              managed: false,
+            },
+          ],
         }),
       }),
     );
-    expect(await screen.findByRole("region", { name: "Hosts file problem" })).toHaveTextContent(
-      "without a matching end marker",
-    );
+    const problem = await screen.findByRole("region", { name: "Hosts file problem" });
+    expect(problem).toHaveTextContent("leaves it alone");
+    expect(problem).toHaveTextContent("line 9: 10.0.0.7 nas.test");
   });
 });

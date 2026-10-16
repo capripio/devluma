@@ -1,19 +1,19 @@
 import type { ReactNode } from "react";
+import { Commands } from "../app/commandBar";
 
 interface PageHeaderProps {
   title: string;
   description?: ReactNode;
+  /** Page commands; they go to the shell's command bar. */
   actions?: ReactNode;
 }
 
 export function PageHeader({ title, description, actions }: PageHeaderProps) {
   return (
-    <header className="flex flex-wrap items-start justify-between gap-3">
-      <div className="min-w-0">
-        <h1 className="text-xl font-semibold">{title}</h1>
-        {description && <p className="mt-1 text-sm text-fg-muted">{description}</p>}
-      </div>
-      {actions && <div className="flex shrink-0 items-start gap-2">{actions}</div>}
+    <header className="flex min-w-0 flex-col gap-1">
+      <h1 className="font-display text-2xl font-semibold tracking-tight">{title}</h1>
+      {description && <p className="max-w-prose text-sm text-pretty text-fg-muted">{description}</p>}
+      {actions && <Commands>{actions}</Commands>}
     </header>
   );
 }

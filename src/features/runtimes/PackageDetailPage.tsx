@@ -16,6 +16,7 @@ import type { OperationProgress, PackageView, VersionView } from "../../types/dt
 import { INSTALL_OPERATION } from "./packages";
 import { UninstallDialog } from "./UninstallDialog";
 import { RuntimeSwitchDialog } from "./RuntimeSwitchDialog";
+import { LoadingState } from "../../components/LoadingState";
 
 /** Download + extracted copy + headroom; mirrors `DISK_FACTOR` in `services/install.rs`. */
 const DISK_FACTOR = 4;
@@ -36,9 +37,7 @@ export function PackageDetailPage() {
     return (
       <>
         {back}
-        <p role="status" className="text-sm text-fg-muted">
-          Loading package…
-        </p>
+        <LoadingState label="Loading package…" shape="panel" rows={4} />
       </>
     );
   }
@@ -109,7 +108,7 @@ function VersionsTable({ pkg, onChanged }: { pkg: PackageView; onChanged: () => 
       {pkg.versions.length === 0 ? (
         <p className="text-sm text-fg-muted">No installable versions are listed for this package.</p>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
+        <div className="overflow-x-auto rounded-md border border-border">
           <table className="w-full text-left text-sm">
             <thead className="bg-surface-raised text-fg-muted">
               <tr>

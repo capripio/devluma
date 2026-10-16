@@ -2,10 +2,10 @@
 
 <img src="src-tauri/icons/128x128.png" alt="Devluma logo" width="96" height="96">
 
-# Devluma — Free, Open-Source Laragon Alternative for Windows
+# Devluma: Free, Open-Source Laragon Alternative for Windows
 
 **A modern local development environment for Windows: PHP, Nginx, Apache, MariaDB, PostgreSQL,
-MongoDB, Node.js, Python and Mailpit — with per-project versions, local `.test` domains and
+MongoDB, Node.js, Python and Mailpit, with per-project versions, local `.test` domains and
 trusted HTTPS, in one portable app.**
 
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
@@ -28,7 +28,7 @@ trusted HTTPS, in one portable app.**
 Devluma is a **free and open-source alternative to Laragon** (and to XAMPP and WampServer) for
 PHP, Laravel, WordPress, Node.js and Python developers on Windows. It installs official builds
 of your web servers, databases and language runtimes, runs them as local services, and gives
-every project its own local domain with HTTPS — **without changing your system `PATH`, without
+every project its own local domain with HTTPS, **without changing your system `PATH`, without
 taking over Windows services, and without running as administrator.**
 
 Like Laragon, Devluma is **portable**: unzip it anywhere and everything it downloads or creates
@@ -43,7 +43,7 @@ config change is **validated and reversible**, and services only ever listen on 
 - **Node.js** (22 LTS, 24 LTS) and **Python** (3.14, 3.15), including project `.venv` support.
 - **Per-project version pinning**: pin PHP 8.2 for a legacy app and PHP 8.5 for a new one.
   Pins never affect other projects or the global default.
-- **Project terminal** that opens with the right runtime versions on `PATH` — your system
+- **Project terminal** that opens with the right runtime versions on `PATH`; your system
   `PATH` is never modified. Choose PowerShell, Command Prompt or **Cmder**.
 
 ### Web servers and databases
@@ -51,12 +51,12 @@ config change is **validated and reversible**, and services only ever listen on 
 - **MariaDB** (MySQL-compatible), **PostgreSQL** and **MongoDB**, each with its own data folder.
 - **Mailpit** to catch outgoing email from your apps during development.
 - One-click **start, stop and restart**, service logs, and clear port-conflict reports (Devluma
-  tells you which program holds a port — it never kills it).
+  tells you which program holds a port and never kills it).
 
 ### Local domains and HTTPS
 - **Automatic virtual hosts**: serve any project folder at a local domain like
   `myapp.test`.
-- **Safe hosts file editing**: only Devluma's own marked block is changed, you see the exact
+- **Safe hosts file editing**: only lines tagged `# managed by devluma` are changed, you see the exact
   diff first, and administrator rights are requested only for that one write.
 - **Local HTTPS certificates** from a private certificate authority that is name-constrained to
   local domains (`.test`, `.localhost`, …), so it can never be used for real websites. Trusting
@@ -76,14 +76,14 @@ config change is **validated and reversible**, and services only ever listen on 
 
 ## Devluma vs Laragon, XAMPP and WAMP
 
-Looking for a **Laragon alternative**? Devluma covers the same everyday workflow — quick
-installs, multiple PHP versions, pretty URLs and HTTPS — with a stronger focus on safety and
+Looking for a **Laragon alternative**? Devluma covers the same everyday workflow (quick
+installs, multiple PHP versions, pretty URLs and HTTPS) with a stronger focus on safety and
 transparency:
 
 | | Devluma |
 |---|---|
 | License | Free and open source (GPL-3.0) |
-| Portable | Yes — one self-contained folder, or a per-user installer |
+| Portable | Yes: one self-contained folder, or a per-user installer |
 | Multiple PHP versions | Yes, plus per-project pins |
 | Web servers | Nginx and Apache |
 | Databases | MariaDB, PostgreSQL, MongoDB |
@@ -100,8 +100,8 @@ transparency:
 
 Get the latest version from the **[Releases page](https://github.com/capripio/devluma/releases/latest)**:
 
-- `Devluma_<version>_x64-setup.exe` — per-user installer (no administrator rights needed).
-- `Devluma_<version>_x64-portable.zip` — portable edition: unzip anywhere writable (not
+- `Devluma_<version>_x64-setup.exe`: per-user installer (no administrator rights needed).
+- `Devluma_<version>_x64-portable.zip`: portable edition: unzip anywhere writable (not
   `C:\Program Files`) and run `devluma.exe`.
 
 ### Requirements
@@ -113,7 +113,7 @@ Get the latest version from the **[Releases page](https://github.com/capripio/de
 
 1. Run Devluma. The first-run setup asks where to keep your tools and data.
 2. Open **Runtimes & Packages** and install PHP, a web server (Nginx or Apache) and a
-   database — plus Node.js or Python if you need them.
+   database, plus Node.js or Python if you need them.
 3. Open **Services**, add the web server and database, and start them.
 4. Add your project folder under **Projects**, then create a site such as `myapp.test` under
    **Sites & Domains**.
@@ -144,7 +144,7 @@ SQLite.
 ## FAQ
 
 **Is Devluma a drop-in replacement for Laragon?**
-It covers the same core workflow — PHP/Laravel/WordPress development with Nginx or Apache,
+It covers the same core workflow: PHP/Laravel/WordPress development with Nginx or Apache,
 MySQL-compatible MariaDB, pretty local URLs and HTTPS. Projects stay where they are; Devluma
 never moves or deletes your project files.
 

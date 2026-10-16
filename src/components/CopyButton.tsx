@@ -29,7 +29,7 @@ export function CopyButton({ value, label }: CopyButtonProps) {
       onClick={copy}
       aria-label={`Copy ${label}`}
       title={`Copy ${label}`}
-      className="inline-flex items-center gap-1 rounded p-1 text-xs text-fg-muted hover:bg-surface-sunken hover:text-fg"
+      className="inline-flex items-center gap-1 rounded p-1 text-xs text-fg-muted transition-colors hover:bg-surface-sunken hover:text-fg active:bg-border/60"
     >
       {state === "copied" ? (
         <Check aria-hidden className="size-3.5" />

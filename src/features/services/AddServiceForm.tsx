@@ -7,6 +7,7 @@ import { toAppError, type AppError } from "../../lib/ipc/errors";
 import { useAsync } from "../../lib/useAsync";
 import type { PackageView } from "../../types/dto";
 import { servicePackageInfo } from "./servicePackages";
+import { LoadingState } from "../../components/LoadingState";
 
 const SERVICE_CATEGORIES: PackageView["category"][] = ["web_server", "database", "mail"];
 
@@ -50,16 +51,12 @@ export function AddServiceForm({ onDone }: { onDone: () => void }) {
   const [error, setError] = useState<AppError | null>(null);
 
   if (catalog.status === "pending") {
-    return (
-      <p role="status" className="text-sm text-fg-muted">
-        Loading installed packages…
-      </p>
-    );
+    return <LoadingState label="Loading installed packages…" shape="inline" />;
   }
   if (catalog.status === "error") return <ErrorPanel error={catalog.error} onRetry={catalog.reload} />;
   if (!selected) {
     return (
-      <div className="flex flex-col items-start gap-2 rounded-lg border border-border p-4 text-sm">
+      <div className="flex flex-col items-start gap-2 rounded-md border border-border p-4 text-sm">
         <p>No web server, database or Mailpit is installed yet.</p>
         <Link to="/runtimes" className="text-accent hover:underline">
           Install one from Runtimes &amp; Packages
@@ -105,7 +102,7 @@ export function AddServiceForm({ onDone }: { onDone: () => void }) {
     <form
       onSubmit={submit}
       aria-label="Add service"
-      className="flex flex-col gap-3 rounded-lg border border-border p-4 text-sm"
+      className="flex flex-col gap-3 rounded-md border border-border p-4 text-sm"
     >
       <div className="flex flex-wrap gap-4">
         <label className="flex flex-col gap-1">

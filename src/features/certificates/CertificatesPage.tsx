@@ -10,6 +10,7 @@ import { ipc } from "../../lib/ipc";
 import { toAppError, type AppError } from "../../lib/ipc/errors";
 import { useAsync } from "../../lib/useAsync";
 import type { CertificateView } from "../../types/dto";
+import { LoadingState } from "../../components/LoadingState";
 
 type Pending = { kind: "trust" | "untrust" | "delete" | "renew"; cert: CertificateView };
 
@@ -21,11 +22,7 @@ export function CertificatesPage() {
         title="SSL Certificates"
         description="Local development certificates. They are never publicly trusted."
       />
-      {certs.status === "pending" && (
-        <p role="status" className="text-sm text-fg-muted">
-          Loading certificates…
-        </p>
-      )}
+      {certs.status === "pending" && <LoadingState label="Loading certificates…" shape="table" columns={5} />}
       {certs.status === "error" && <ErrorPanel error={certs.error} onRetry={certs.reload} />}
       {certs.status === "success" && <Certificates certs={certs.data} onChanged={certs.refresh} />}
     </>
@@ -65,7 +62,7 @@ function Certificates({ certs, onChanged }: { certs: CertificateView[]; onChange
       {error && <ErrorPanel error={error} />}
       <section
         aria-labelledby="ca-heading"
-        className="flex flex-col gap-3 rounded-lg border border-border p-4 text-sm"
+        className="flex flex-col gap-3 rounded-md border border-border p-4 text-sm"
       >
         <h2 id="ca-heading" className="font-semibold">
           Local certificate authority
@@ -141,7 +138,7 @@ function Certificates({ certs, onChanged }: { certs: CertificateView[]; onChange
             description="Turn on HTTPS for a site, or generate a certificate above. Generating never trusts anything."
           />
         ) : (
-          <div className="overflow-x-auto rounded-lg border border-border">
+          <div className="overflow-x-auto rounded-md border border-border">
             <table className="w-full text-left text-sm">
               <thead className="bg-surface-raised text-fg-muted">
                 <tr>

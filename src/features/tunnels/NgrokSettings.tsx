@@ -14,7 +14,7 @@ export function NgrokSettings() {
   return (
     <section
       aria-labelledby="ngrok-heading"
-      className="flex flex-col gap-3 rounded-lg border border-border p-4 text-sm"
+      className="flex flex-col gap-3 rounded-md border border-border p-4 text-sm"
     >
       <h2 id="ngrok-heading" className="font-semibold">
         Sharing with ngrok

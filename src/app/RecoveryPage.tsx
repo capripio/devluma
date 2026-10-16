@@ -22,7 +22,7 @@ export function RecoveryPage({ status }: { status: StartupStatus }) {
 
       <section
         aria-labelledby="recovery-safe-heading"
-        className="rounded-lg border border-border bg-surface-raised p-4 text-sm"
+        className="rounded-md border border-border bg-surface-raised p-4 text-sm"
       >
         <h2 id="recovery-safe-heading" className="font-semibold">
           Nothing was deleted

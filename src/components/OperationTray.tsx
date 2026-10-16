@@ -15,13 +15,8 @@ export function OperationTray({ id, hidden }: { id: string; hidden?: boolean }) 
   ];
 
   return (
-    <section
-      id={id}
-      hidden={hidden}
-      aria-label="Operations"
-      className="border-t border-border bg-surface-raised"
-    >
-      <h2 className="sr-only">Operations</h2>
+    <section id={id} hidden={hidden} aria-label="Operations" className="bg-surface-raised">
+      <h2 className="label-caps border-b border-border px-4 py-2.5 text-fg-muted">Operations</h2>
       {loadError && (
         <div className="p-3">
           <ErrorPanel error={loadError} />
@@ -35,7 +30,7 @@ export function OperationTray({ id, hidden }: { id: string; hidden?: boolean }) 
           </p>
         )
       ) : (
-        <ul className="max-h-48 divide-y divide-border overflow-y-auto">
+        <ul className="max-h-[50vh] divide-y divide-border overflow-y-auto">
           {ordered.map((op) => (
             <li key={op.operationId} className="flex flex-wrap items-center gap-3 px-4 py-2 text-sm">
               <OperationStatusBadge status={op.status} />

@@ -74,7 +74,7 @@ pub struct ConnectionInfo {
     pub url: String,
     /// Command line for the engine's own client, if the download includes one.
     pub cli: Option<String>,
-    /// Honest note about the credentials (design.md: never present a default as secure).
+    /// Honest note about the credentials (docs/design-brief.md: never present a default as secure).
     pub credential_note: String,
 }
 

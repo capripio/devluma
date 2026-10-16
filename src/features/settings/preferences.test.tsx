@@ -46,7 +46,7 @@ function storingMock(extra: Record<string, (args?: Record<string, unknown>) => u
 describe("Settings preferences", () => {
   it("saves a typed domain suffix and the terminal, showing the backend's advice", async () => {
     const mock = storingMock();
-    const { container } = await renderApp("/settings", mock);
+    const { container } = await renderApp("/settings/sites-terminal", mock);
     const section = (await screen.findByRole("heading", { name: "Sites & terminal" })).closest("section")!;
 
     const field = within(section).getByRole("combobox", { name: "Domain suffix for new sites" });
@@ -68,7 +68,7 @@ describe("Settings preferences", () => {
 
   it("fills the field from a suggestion", async () => {
     const mock = storingMock();
-    await renderApp("/settings", mock);
+    await renderApp("/settings/sites-terminal", mock);
     const section = (await screen.findByRole("heading", { name: "Sites & terminal" })).closest("section")!;
     await userEvent.click(within(section).getByRole("button", { name: ".local" }));
     expect(within(section).getByRole("combobox", { name: "Domain suffix for new sites" })).toHaveValue(
@@ -80,7 +80,7 @@ describe("Settings preferences", () => {
 
   it("saves default ports and a fixed HTTPS port without touching other preferences", async () => {
     const mock = storingMock();
-    await renderApp("/settings", mock);
+    await renderApp("/settings/ports", mock);
     const section = (await screen.findByRole("heading", { name: "Ports" })).closest("section")!;
 
     const nginx = within(section).getByRole("spinbutton", { name: "Nginx" });
@@ -103,13 +103,14 @@ describe("Settings preferences", () => {
 
   it("keeps earlier saves when another section saves later", async () => {
     const mock = storingMock();
-    await renderApp("/settings", mock);
+    await renderApp("/settings/sites-terminal", mock);
     const sites = (await screen.findByRole("heading", { name: "Sites & terminal" })).closest("section")!;
     await userEvent.click(within(sites).getByRole("button", { name: ".localhost" }));
     await userEvent.click(within(sites).getByRole("button", { name: "Save" }));
     await within(sites).findByText("Saved.");
 
-    const downloads = screen.getByRole("heading", { name: "Downloads" }).closest("section")!;
+    await userEvent.click(screen.getByRole("link", { name: "Downloads" }));
+    const downloads = (await screen.findByRole("heading", { name: "Downloads" })).closest("section")!;
     const connect = within(downloads).getByRole("spinbutton", { name: /Connection timeout/ });
     await userEvent.clear(connect);
     await userEvent.type(connect, "60");
@@ -132,7 +133,7 @@ describe("Settings preferences", () => {
         };
       },
     });
-    await renderApp("/settings", mock);
+    await renderApp("/settings/ports", mock);
     const section = (await screen.findByRole("heading", { name: "Ports" })).closest("section")!;
     await userEvent.click(within(section).getByRole("button", { name: "Save" }));
     expect(await within(section).findByText(/must be different/)).toBeInTheDocument();
@@ -178,7 +179,7 @@ describe("Settings preferences", () => {
       const r = await base(command, args);
       return command === "get_preferences" ? { ...(r as object), launchAtLogin: login } : r;
     };
-    await renderApp("/settings", mock);
+    await renderApp("/settings/startup", mock);
     const section = (await screen.findByRole("heading", { name: "Startup behavior" })).closest("section")!;
 
     await userEvent.click(within(section).getByRole("checkbox", { name: /Start Devluma when I sign in/ }));
@@ -191,7 +192,7 @@ describe("Settings preferences", () => {
 
   it("lists storage folders with their sizes", async () => {
     await renderApp(
-      "/settings",
+      "/settings/storage",
       createMockAdapter({
         ...defaultHandlers,
         get_storage_usage: () => ({

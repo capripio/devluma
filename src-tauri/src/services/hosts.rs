@@ -1,6 +1,6 @@
 //! Hosts-file workflow (app_flow.md §10): read → plan (exact diff) → back up → write
 //! (directly if the user may, otherwise through the elevated helper) → re-read and verify.
-//! Only Devluma's own block is ever changed.
+//! Only Devluma's own tagged lines (`# managed by devluma`, ADR 0016) are ever changed.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -116,11 +116,13 @@ pub fn default_writer(paths: &DataPaths) -> (PathBuf, Arc<dyn HostsWriter>) {
 pub struct HostsView {
     pub path: String,
     pub needs_elevation: bool,
+    /// Devluma's own lines only (tagged `# managed by devluma`, loopback).
     pub entries: Vec<HostsLine>,
-    pub raw: String,
+    /// How many other entries the file has; Devluma never lists or edits them.
+    pub other_count: usize,
+    /// Lines carrying Devluma's tag on a non-loopback address: left alone, shown as a warning.
+    pub stray_tags: Vec<HostsLine>,
     pub backups: Vec<HostsBackup>,
-    /// Set when the file can't be parsed safely (e.g. unbalanced Devluma markers).
-    pub problem: Option<String>,
 }
 
 /// A previewed change. `sha256_before` pins the exact file the user saw.
@@ -178,32 +180,26 @@ impl HostsService {
     pub fn view(&self) -> Result<HostsView, Failure> {
         let (text, _) = self.read_file()?;
         let backups = self.db.read(|c| repo::list(c, 20)).unwrap_or_default();
-        let (entries, problem) = match HostsFile::parse(&text) {
-            Ok(f) => (f.entries, None),
-            Err(e) => (Vec::new(), Some(e.to_string())),
-        };
+        let file = HostsFile::parse(&text);
         Ok(HostsView {
             path: self.hosts_path.display().to_string(),
             needs_elevation: self.writer.needs_elevation(),
-            entries,
-            raw: text.chars().take(256 * 1024).collect(),
+            other_count: file.other_count(),
+            stray_tags: file.stray_tags.clone(),
+            entries: file.entries.into_iter().filter(|e| e.managed).collect(),
             backups,
-            problem,
         })
     }
 
     pub fn managed(&self) -> Result<Vec<ManagedEntry>, Failure> {
         let (text, _) = self.read_file()?;
-        HostsFile::parse(&text)
-            .map(|f| f.managed())
-            .map_err(|e| failure(ErrorCode::ValidationError, e.to_string()))
+        Ok(HostsFile::parse(&text).managed())
     }
 
     /// Plans replacing Devluma's entries with `desired`.
     pub fn plan(&self, desired: &[ManagedEntry]) -> Result<HostsPlan, Failure> {
         let (text, sha) = self.read_file()?;
-        let file = HostsFile::parse(&text)
-            .map_err(|e| failure(ErrorCode::ValidationError, e.to_string()))?;
+        let file = HostsFile::parse(&text);
         let entries = hosts::validate(desired)
             .map_err(|e| failure(ErrorCode::ValidationError, e.to_string()))?;
         let new_text = file
@@ -341,9 +337,8 @@ impl HostsService {
                 format!("The backup file is missing: {e}"),
             )
         })?;
-        HostsFile::parse(&text)
-            .map(|f| f.managed())
-            .map_err(|e| failure(ErrorCode::ValidationError, e.to_string()))
+        // Backups from before tagged lines (the old marked block) hold no tagged entries.
+        Ok(HostsFile::parse(&text).managed())
     }
 }
 
@@ -413,7 +408,10 @@ mod tests {
         let (_d, svc, hosts) = setup("127.0.0.1 localhost\r\n");
         let plan = svc.plan_change(&[e("a.test")], &[]).unwrap();
         assert_eq!(plan.changes, vec![change("a.test", "127.0.0.1", "add")]);
-        assert!(plan.diff.contains("+127.0.0.1 a.test"));
+        assert!(
+            plan.diff
+                .contains("+127.0.0.1\ta.test\t# managed by devluma")
+        );
         let first = svc.apply(&plan, "Site a.test", "op1").unwrap();
         assert!(first.changed);
 
@@ -457,10 +455,15 @@ mod tests {
     }
 
     #[test]
-    fn view_reports_unbalanced_markers_instead_of_guessing() {
-        let (_d, svc, _hosts) = setup(&format!("{}\n127.0.0.1 a.test\n", hosts::BEGIN));
+    fn view_lists_only_devluma_lines_and_counts_the_rest() {
+        let (_d, svc, _hosts) = setup(
+            "127.0.0.1 localhost\n127.0.0.1 child.local #laragon magic!\n127.0.0.1\tshop.test\t# managed by devluma\n10.0.0.7 nas.test # managed by devluma\n",
+        );
         let v = svc.view().unwrap();
-        assert!(v.problem.unwrap().contains("end marker"));
-        assert!(svc.plan(&[]).is_err());
+        assert_eq!(v.entries.len(), 1);
+        assert_eq!(v.entries[0].hostnames, vec!["shop.test"]);
+        assert_eq!(v.other_count, 3);
+        assert_eq!(v.stray_tags.len(), 1);
+        assert_eq!(v.stray_tags[0].line, 4);
     }
 }

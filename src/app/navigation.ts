@@ -18,7 +18,7 @@ export interface NavItem {
   icon: LucideIcon;
 }
 
-// Order and names from prd.md §8 / design.md §2.
+// Order and names from prd.md §8 / docs/design-brief.md §2.
 export const NAV_ITEMS: NavItem[] = [
   { path: "/", label: "Overview", icon: LayoutDashboard },
   { path: "/projects", label: "Projects", icon: FolderGit2 },

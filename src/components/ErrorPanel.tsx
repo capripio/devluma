@@ -64,7 +64,7 @@ interface ErrorPanelProps {
 export function ErrorPanel({ error, onRetry, retrying }: ErrorPanelProps) {
   const guidance = GUIDANCE[error.code];
   return (
-    <div role="alert" className="flex gap-3 rounded-lg border border-danger/40 bg-danger-subtle p-4 text-sm">
+    <div role="alert" className="flex gap-3 rounded-md border border-danger/40 bg-danger-subtle p-4 text-sm">
       <CircleX aria-hidden className="mt-0.5 size-5 shrink-0 text-danger" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <p className="font-semibold text-fg">{guidance.title}</p>

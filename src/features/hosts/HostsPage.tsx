@@ -23,7 +23,7 @@ export function HostsPage() {
     <>
       <PageHeader
         title="Hosts File"
-        description="Entries in the Windows hosts file. Devluma only edits its own marked section."
+        description="The local domains Devluma maps to this computer. Only its own lines are shown or edited."
       />
       {hosts.status === "pending" && (
         <p role="status" className="text-sm text-fg-muted">
@@ -37,83 +37,94 @@ export function HostsPage() {
 }
 
 function Hosts({ view }: { view: HostsView }) {
-  const [raw, setRaw] = useState(false);
   const [change, setChange] = useState<{ title: string; request: HostsChangeRequest } | null>(null);
+  const sites = useAsync(ipc.listSites);
+  const siteFor = (domain: string) =>
+    sites.status === "success" ? sites.data.find((s) => s.domain === domain) : undefined;
   return (
     <>
       <p className="flex items-center gap-1 font-mono text-xs break-all text-fg-muted">
         {view.path}
         <CopyButton value={view.path} label="hosts file path" />
       </p>
-      {view.problem && (
+      {view.strayTags.length > 0 && (
         <section
           aria-label="Hosts file problem"
-          className="flex gap-3 rounded-lg border border-warning/40 bg-warning-subtle p-4 text-sm"
+          className="flex gap-3 rounded-md border border-warning/40 bg-warning-subtle p-4 text-sm"
         >
           <TriangleAlert aria-hidden className="mt-0.5 size-5 shrink-0 text-warning" />
-          <p>{view.problem}</p>
+          <div className="flex flex-col gap-1">
+            <p>
+              {view.strayTags.length === 1 ? "A line carries" : `${view.strayTags.length} lines carry`}{" "}
+              Devluma&apos;s tag but point{view.strayTags.length === 1 ? "s" : ""} away from this computer, so
+              Devluma leaves {view.strayTags.length === 1 ? "it" : "them"} alone:
+            </p>
+            <ul className="font-mono text-xs">
+              {view.strayTags.map((t) => (
+                <li key={t.line}>
+                  line {t.line}: {t.ip} {t.hostnames.join(" ")}
+                </li>
+              ))}
+            </ul>
+          </div>
         </section>
       )}
-      <div className="flex gap-2">
-        <Button onClick={() => setRaw((r) => !r)} aria-pressed={raw}>
-          {raw ? "Show table" : "Show raw file"}
-        </Button>
-      </div>
-      {raw ? (
-        <pre
-          aria-label="Raw hosts file"
-          className="max-h-96 overflow-auto rounded-md bg-surface-sunken p-3 font-mono text-xs"
-        >
-          {view.raw}
-        </pre>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-surface-raised text-fg-muted">
+      <div className="overflow-x-auto rounded-md border border-border">
+        <table className="w-full text-left text-sm">
+          <caption className="sr-only">Devluma&apos;s entries in the hosts file</caption>
+          <thead className="bg-surface-raised">
+            <tr>
+              {["Domain", "Address", "Used by", ""].map((h, i) => (
+                <th key={i} scope="col" className="px-3 py-2 font-semibold">
+                  {h || <span className="sr-only">Actions</span>}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {view.entries.length === 0 && (
               <tr>
-                {["Line", "Address", "Names", "Comment", "Managed by", ""].map((h, i) => (
-                  <th key={i} scope="col" className="px-3 py-2 font-medium">
-                    {h || <span className="sr-only">Actions</span>}
-                  </th>
-                ))}
+                <td colSpan={4} className="px-3 py-3 text-fg-muted">
+                  No Devluma entries yet. Adding a site creates one.
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {view.entries.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-3 py-3 text-fg-muted">
-                    No active entries (comments only).
-                  </td>
-                </tr>
-              )}
-              {view.entries.map((e) => (
-                <tr key={e.line}>
-                  <td className="px-3 py-2 font-mono text-xs">{e.line}</td>
-                  <td className="px-3 py-2 font-mono">{e.ip}</td>
-                  <td className="px-3 py-2 font-mono">{e.hostnames.join(" ")}</td>
-                  <td className="px-3 py-2 text-fg-muted">{e.comment ?? ""}</td>
-                  <td className="px-3 py-2">{e.managed ? "Devluma" : "Other / you"}</td>
-                  <td className="px-3 py-2">
-                    {e.managed && (
+            )}
+            {view.entries.flatMap((e) =>
+              e.hostnames.map((domain) => {
+                const site = siteFor(domain);
+                return (
+                  <tr key={`${e.line}:${domain}`}>
+                    <th scope="row" className="px-3 py-2 font-mono font-normal">
+                      {domain}
+                    </th>
+                    <td className="px-3 py-2 font-mono">{e.ip}</td>
+                    <td className="px-3 py-2">
+                      {site ? site.projectName : <span className="text-fg-muted">No site</span>}
+                    </td>
+                    <td className="px-3 py-2">
                       <Button
                         onClick={() =>
                           setChange({
-                            title: `Remove ${e.hostnames.join(", ")} from the hosts file?`,
-                            request: { removeDomains: e.hostnames },
+                            title: `Remove ${domain} from the hosts file?`,
+                            request: { removeDomains: [domain] },
                           })
                         }
-                        aria-label={`Remove ${e.hostnames.join(" ")}`}
+                        aria-label={`Remove ${domain}`}
                       >
                         Remove
                       </Button>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+                    </td>
+                  </tr>
+                );
+              }),
+            )}
+          </tbody>
+        </table>
+      </div>
+      <p className="text-xs text-fg-muted">
+        Devluma marks its lines with <span className="font-mono"># managed by devluma</span> and leaves the{" "}
+        {view.otherCount === 1 ? "other entry" : `other ${view.otherCount} entries`} in this file alone.
+      </p>
 
       <section aria-labelledby="backups-heading" className="flex flex-col gap-2">
         <h2 id="backups-heading" className="text-sm font-semibold">
@@ -122,7 +133,7 @@ function Hosts({ view }: { view: HostsView }) {
         {view.backups.length === 0 ? (
           <p className="text-sm text-fg-muted">Devluma hasn&apos;t changed the hosts file yet.</p>
         ) : (
-          <ul className="divide-y divide-border rounded-lg border border-border text-sm">
+          <ul className="divide-y divide-border rounded-md border border-border text-sm">
             {view.backups.map((b) => (
               <li key={b.id} className="flex flex-wrap items-center gap-3 px-3 py-2">
                 <time dateTime={b.createdAt} className="whitespace-nowrap">

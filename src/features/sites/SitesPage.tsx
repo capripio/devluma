@@ -12,6 +12,7 @@ import { useAsync } from "../../lib/useAsync";
 import type { SiteView } from "../../types/dto";
 import { SharedAddress, ShareSite } from "../tunnels/ShareSite";
 import { SiteForm } from "./SiteForm";
+import { LoadingState } from "../../components/LoadingState";
 
 const SITE_OPERATIONS = new Set(["apply_site", "remove_site", "apply_hosts"]);
 
@@ -33,11 +34,7 @@ export function SitesPage() {
         actions={addButton}
       />
       {form && <SiteForm existing={form.existing} onDone={() => setForm(null)} />}
-      {sites.status === "pending" && (
-        <p role="status" className="text-sm text-fg-muted">
-          Loading sites…
-        </p>
-      )}
+      {sites.status === "pending" && <LoadingState label="Loading sites…" shape="table" columns={5} />}
       {sites.status === "error" && <ErrorPanel error={sites.error} onRetry={sites.reload} />}
       {sites.status === "success" &&
         (sites.data.length === 0 ? (
@@ -85,7 +82,7 @@ function SitesTable({ sites, onEdit }: { sites: SiteView[]; onEdit: (s: SiteView
 
   return (
     <>
-      <div className="overflow-x-auto rounded-lg border border-border">
+      <div className="overflow-x-auto rounded-md border border-border">
         <table className="w-full text-left text-sm">
           <thead className="bg-surface-raised text-fg-muted">
             <tr>

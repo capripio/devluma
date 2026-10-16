@@ -10,25 +10,26 @@ import { ProjectsPage } from "../features/projects/ProjectsPage";
 import { PackageDetailPage } from "../features/runtimes/PackageDetailPage";
 import { PhpInstallationPage } from "../features/runtimes/PhpInstallationPage";
 import { RuntimesPage } from "../features/runtimes/RuntimesPage";
-import { ServiceDetailPage } from "../features/services/ServiceDetailPage";
 import { ServicesPage } from "../features/services/ServicesPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { SitesPage } from "../features/sites/SitesPage";
-import { AppShell } from "./AppShell";
+import { AppShell, type RouteHandle } from "./AppShell";
+
+const pane: RouteHandle = { layout: "pane" };
 
 export const routes: RouteObject[] = [
   {
     path: "/",
     element: <AppShell />,
     children: [
-      { index: true, element: <OverviewPage /> },
+      { index: true, element: <OverviewPage />, handle: pane },
       ...Object.entries(PLANNED_PAGES).map(([path, props]) => ({
         path: path.slice(1),
         element: <PlannedPage {...props} />,
       })),
       { path: "projects", element: <ProjectsPage /> },
-      { path: "services", element: <ServicesPage /> },
-      { path: "services/:serviceId", element: <ServiceDetailPage /> },
+      { path: "services", element: <ServicesPage />, handle: pane },
+      { path: "services/:serviceId", element: <ServicesPage />, handle: pane },
       { path: "runtimes", element: <RuntimesPage /> },
       { path: "runtimes/:packageId", element: <PackageDetailPage /> },
       { path: "runtimes/php/installations/:installationId", element: <PhpInstallationPage /> },
@@ -37,7 +38,8 @@ export const routes: RouteObject[] = [
       { path: "ssl", element: <CertificatesPage /> },
       { path: "databases", element: <DatabasesPage /> },
       { path: "logs", element: <LogsPage /> },
-      { path: "settings", element: <SettingsPage /> },
+      { path: "settings", element: <SettingsPage />, handle: pane },
+      { path: "settings/:section", element: <SettingsPage />, handle: pane },
       { path: "*", element: <Navigate to="/" replace /> },
     ],
   },

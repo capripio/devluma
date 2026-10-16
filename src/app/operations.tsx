@@ -3,7 +3,7 @@ import { events, ipc } from "../lib/ipc";
 import { toAppError, type AppError } from "../lib/ipc/errors";
 import type { OperationProgress } from "../types/dto";
 
-// Operations live above the router so they stay visible across navigation (design.md §6).
+// Operations live above the router so they stay visible across navigation (docs/design-brief.md §6).
 // Seeded from the persisted journal (so interrupted work is visible after a restart) and
 // kept current by `operation://progress` events.
 

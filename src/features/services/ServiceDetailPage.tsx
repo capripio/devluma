@@ -13,24 +13,28 @@ import { ipc } from "../../lib/ipc";
 import { useAsync } from "../../lib/useAsync";
 import type { ServiceView } from "../../types/dto";
 import { ServiceActions } from "./ServiceActions";
+import { explainService } from "./ServiceInspector";
 import { useServices } from "./useServices";
+import { LoadingState } from "../../components/LoadingState";
 
-export function ServiceDetailPage() {
+/** Right-hand pane of the Services page for one service (the route stays deep-linkable). */
+export function ServiceDetail() {
   const { serviceId = "" } = useParams();
   const services = useServices();
   const back = (
-    <Link to="/services" className="inline-flex items-center gap-1 text-sm text-accent hover:underline">
+    <Link
+      to="/services"
+      className="inline-flex items-center gap-1 self-start text-sm text-accent hover:underline wide:hidden"
+    >
       <ArrowLeft aria-hidden className="size-4" />
-      Services
+      All services
     </Link>
   );
   if (services.status === "pending") {
     return (
       <>
         {back}
-        <p role="status" className="text-sm text-fg-muted">
-          Loading service…
-        </p>
+        <LoadingState label="Loading service…" shape="panel" rows={4} />
       </>
     );
   }
@@ -54,11 +58,11 @@ export function ServiceDetailPage() {
   return (
     <>
       {back}
-      <PageHeader
-        title={svc.instanceName}
-        description={`${svc.packageName} ${svc.version}`}
-        actions={<ServiceStatusBadge state={svc.observedState} />}
-      />
+      <PageHeader title={svc.instanceName} description={`${svc.packageName} ${svc.version}`} />
+      <div className="flex flex-wrap items-center gap-3">
+        <ServiceStatusBadge state={svc.observedState} />
+        <span className="text-sm text-pretty text-fg-muted">{explainService(svc)}</span>
+      </div>
       <ServiceActions service={svc} />
       <ServiceTabs service={svc} />
     </>
@@ -66,7 +70,7 @@ export function ServiceDetailPage() {
 }
 
 const tabClass =
-  "border-b-2 border-transparent px-3 py-2 text-sm data-[state=active]:border-accent data-[state=active]:font-medium";
+  "border-b-2 border-transparent px-3 py-2 text-sm text-fg-muted transition-colors hover:text-fg data-[state=active]:text-fg data-[state=active]:border-accent data-[state=active]:font-medium";
 
 function ServiceTabs({ service: s }: { service: ServiceView }) {
   return (
@@ -136,7 +140,7 @@ function Overview({ service: s }: { service: ServiceView }) {
         )}
       </dl>
       {isDb && (
-        <section aria-labelledby="conn-heading" className="rounded-lg border border-border p-4">
+        <section aria-labelledby="conn-heading" className="rounded-md border border-border p-4">
           <h2 id="conn-heading" className="font-semibold">
             Connection
           </h2>
@@ -188,7 +192,8 @@ function Overview({ service: s }: { service: ServiceView }) {
 
 function Configuration({ serviceId }: { serviceId: string }) {
   const details = useAsync(() => ipc.getServiceDetails(serviceId));
-  if (details.status === "pending") return <p className="text-sm text-fg-muted">Loading…</p>;
+  if (details.status === "pending")
+    return <LoadingState label="Loading configuration…" shape="panel" rows={6} />;
   if (details.status === "error") return <ErrorPanel error={details.error} onRetry={details.reload} />;
   const d = details.data;
   return (
@@ -211,7 +216,7 @@ function Configuration({ serviceId }: { serviceId: string }) {
 function Logs({ serviceId }: { serviceId: string }) {
   const details = useAsync(() => ipc.getServiceDetails(serviceId));
   const [file, setFile] = useState(0);
-  if (details.status === "pending") return <p className="text-sm text-fg-muted">Loading…</p>;
+  if (details.status === "pending") return <LoadingState label="Loading logs…" shape="panel" rows={6} />;
   if (details.status === "error") return <ErrorPanel error={details.error} onRetry={details.reload} />;
   const logs = details.data.logs;
   const current = logs[file] ?? logs[0];

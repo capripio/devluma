@@ -63,6 +63,8 @@ export function ServiceActions({ service }: { service: ServiceView }) {
         )}
         {(s === "running" || s === "degraded") && (
           <Button
+            // A degraded service's next step is usually a restart (Stop stays secondary).
+            variant={s === "degraded" ? "primary" : "secondary"}
             pending={pending === "restart"}
             disabled={pending !== null}
             onClick={() => run("restart")}

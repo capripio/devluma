@@ -13,6 +13,7 @@ import type { ProjectView, SwitchRequest } from "../../types/dto";
 import { RuntimeSwitchDialog } from "../runtimes/RuntimeSwitchDialog";
 import { OpenTerminalButton } from "../terminal/OpenTerminalButton";
 import { terminalOpenedMessage } from "../terminal/terminal";
+import { LoadingState } from "../../components/LoadingState";
 
 export function ProjectsPage() {
   const projects = useAsync(ipc.listProjects);
@@ -44,11 +45,7 @@ export function ProjectsPage() {
           }}
         />
       )}
-      {projects.status === "pending" && (
-        <p role="status" className="text-sm text-fg-muted">
-          Loading projects…
-        </p>
-      )}
+      {projects.status === "pending" && <LoadingState label="Loading projects…" shape="table" columns={5} />}
       {projects.status === "error" && <ErrorPanel error={projects.error} onRetry={projects.reload} />}
       {projects.status === "success" &&
         (projects.data.length === 0 ? (
@@ -93,7 +90,7 @@ function AddProjectForm({ onCancel, onAdded }: { onCancel: () => void; onAdded: 
     <form
       onSubmit={submit}
       aria-label="Add project"
-      className="flex flex-col gap-3 rounded-lg border border-border p-4 text-sm"
+      className="flex flex-col gap-3 rounded-md border border-border p-4 text-sm"
     >
       <div className="flex flex-wrap gap-4">
         <label className="flex flex-col gap-1">
@@ -152,7 +149,7 @@ function ProjectsTable({ projects, onChanged }: { projects: ProjectView[]; onCha
 
   return (
     <>
-      <div className="overflow-x-auto rounded-lg border border-border">
+      <div className="overflow-x-auto rounded-md border border-border">
         <table className="w-full text-left text-sm">
           <thead className="bg-surface-raised text-fg-muted">
             <tr>

@@ -1,4 +1,5 @@
 import { useCallback, useState } from "react";
+import { setNativeWindowTheme } from "../lib/ipc";
 
 export const THEME_PREFERENCES = ["system", "light", "dark"] as const;
 export type ThemePreference = (typeof THEME_PREFERENCES)[number];
@@ -20,6 +21,7 @@ export function applyThemePreference(pref: ThemePreference): void {
   const root = document.documentElement;
   if (pref === "system") root.removeAttribute("data-theme");
   else root.setAttribute("data-theme", pref);
+  setNativeWindowTheme(pref === "system" ? null : pref);
 }
 
 export function useThemePreference(): [ThemePreference, (pref: ThemePreference) => void] {

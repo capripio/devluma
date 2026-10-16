@@ -6,6 +6,7 @@ import { AppError } from "../lib/ipc/errors";
 import { SERVICE_STATES } from "../types/dto";
 import { ConfirmChangeDialog } from "./ConfirmChangeDialog";
 import { ErrorPanel } from "./ErrorPanel";
+import { LoadingState } from "./LoadingState";
 import { ServiceStatusBadge } from "./StatusBadge";
 
 describe("ServiceStatusBadge", () => {
@@ -106,5 +107,19 @@ describe("ConfirmChangeDialog", () => {
     expect(screen.getByRole("dialog")).toContainElement(document.activeElement as HTMLElement);
     await userEvent.keyboard("{Escape}");
     expect(screen.getByTestId("state")).toHaveTextContent("closed");
+  });
+});
+
+describe("LoadingState", () => {
+  it.each(["table", "panel", "inline"] as const)("announces the label as a status (%s)", (shape) => {
+    render(<LoadingState label="Loading projects…" shape={shape} />);
+    expect(screen.getByRole("status")).toHaveTextContent("Loading projects…");
+  });
+
+  it("hides the skeleton outline from assistive technology", () => {
+    const { container } = render(<LoadingState label="Loading sites…" columns={3} rows={2} />);
+    const outline = container.querySelector("[aria-hidden]");
+    expect(outline).not.toBeNull();
+    expect(screen.getByRole("status").textContent).toBe("Loading sites…");
   });
 });

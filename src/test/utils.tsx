@@ -102,9 +102,9 @@ export const defaultHandlers: Record<string, (args?: Record<string, unknown>) =>
     path: String.raw`C:\Windows\System32\drivers\etc\hosts`,
     needsElevation: true,
     entries: [],
-    raw: "# hosts\r\n",
+    otherCount: 0,
+    strayTags: [],
     backups: [],
-    problem: null,
   }),
 };
 

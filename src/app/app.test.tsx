@@ -126,19 +126,18 @@ describe("planned sections", () => {
 });
 
 describe("overview", () => {
-  it("shows app details from the backend", async () => {
+  it("shows the app version in the status bar", async () => {
     await renderApp("/");
-    expect(await screen.findByText(/0\.1\.0/)).toBeInTheDocument();
-    expect(screen.getByText(/windows \/ x86_64/)).toBeInTheDocument();
+    expect(await screen.findByText("Devluma 0.1.0 (debug)")).toBeInTheDocument();
   });
 
   it("shows a safe error with retry when the backend fails, and recovers", async () => {
     let fail = true;
     const mock = createMockAdapter({
       ...defaultHandlers,
-      get_app_info: () => {
+      list_projects: () => {
         if (fail) throw { code: "INTERNAL", message: "Backend hiccup.", recoverable: true };
-        return defaultHandlers.get_app_info!();
+        return [];
       },
     });
     await renderApp("/", mock);
@@ -146,7 +145,7 @@ describe("overview", () => {
 
     fail = false;
     await userEvent.click(screen.getByRole("button", { name: "Retry" }));
-    expect(await screen.findByText(/0\.1\.0/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "No projects on the map yet" })).toBeInTheDocument();
   });
 
   it("lists recent operations from the journal", async () => {
@@ -155,7 +154,6 @@ describe("overview", () => {
       createMockAdapter({
         ...defaultHandlers,
         list_operations: () => [
-          operation({ operationId: "a", status: "succeeded", startedAt: "2026-10-11T09:00:00.000Z" }),
           operation({
             operationId: "b",
             operationType: "switch_runtime",
@@ -163,16 +161,18 @@ describe("overview", () => {
             safeMessage: "php.exe -v did not report 8.4",
             startedAt: "2026-10-11T10:00:00.000Z",
           }),
+          operation({ operationId: "a", status: "succeeded", startedAt: "2026-10-11T09:00:00.000Z" }),
         ],
       }),
     );
-    const table = await screen.findByRole("table");
-    const rows = within(table).getAllByRole("row").slice(1);
-    expect(rows[0]).toHaveTextContent("Switch runtime");
-    expect(rows[0]).toHaveTextContent("Failed");
-    expect(rows[0]).toHaveTextContent("php.exe -v did not report 8.4");
-    expect(rows[1]).toHaveTextContent("Install package");
-    expect(rows[1]).toHaveTextContent("Complete");
+    const pane = await screen.findByRole("complementary", { name: "Station details" });
+    const section = within(pane).getByRole("region", { name: "Recent operations" });
+    const items = await within(section).findAllByRole("listitem");
+    expect(items[0]).toHaveTextContent("Switch runtime");
+    expect(items[0]).toHaveTextContent("Failed");
+    expect(items[0]).toHaveTextContent("php.exe -v did not report 8.4");
+    expect(items[1]).toHaveTextContent("Install package");
+    expect(items[1]).toHaveTextContent("Complete");
   });
 });
 

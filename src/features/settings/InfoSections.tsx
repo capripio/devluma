@@ -9,6 +9,7 @@ import { useAsync } from "../../lib/useAsync";
 import type { PackageView } from "../../types/dto";
 import { RuntimeSwitchDialog } from "../runtimes/RuntimeSwitchDialog";
 import { SettingsSection } from "./PreferenceSections";
+import { LoadingState } from "../../components/LoadingState";
 
 const FOLDER_LABELS: Record<string, string> = {
   packages: "Downloaded tools",
@@ -108,7 +109,7 @@ export function RuntimeDefaultsSettings() {
         Projects use these versions unless they pin their own on the Projects page. Changing a default shows
         exactly what changes before anything is applied.
       </p>
-      {catalog.status === "pending" && <p role="status">Loading runtimes…</p>}
+      {catalog.status === "pending" && <LoadingState label="Loading runtimes…" shape="inline" />}
       {catalog.status === "error" && <ErrorPanel error={catalog.error} onRetry={catalog.reload} />}
       {catalog.status === "success" && (
         <ul className="flex flex-col gap-3">
@@ -236,7 +237,7 @@ export function AboutSettings() {
   const info = useAsync(ipc.getAppInfo);
   return (
     <SettingsSection id="about-heading" title="About">
-      {info.status === "pending" && <p role="status">Loading…</p>}
+      {info.status === "pending" && <LoadingState label="Loading…" shape="inline" />}
       {info.status === "error" && <ErrorPanel error={info.error} onRetry={info.reload} />}
       {info.status === "success" && (
         <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1">

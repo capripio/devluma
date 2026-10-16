@@ -189,4 +189,5 @@ export const events = {
 };
 
 export { AppError } from "./errors";
+export { setNativeWindowTheme } from "./adapter";
 export type { ErrorCode } from "./errors";

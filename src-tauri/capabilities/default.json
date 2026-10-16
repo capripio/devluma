@@ -1,11 +1,12 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Main window: Devluma's own domain commands plus event listening. No shell, fs or other plugin access.",
+  "description": "Main window: Devluma's own domain commands, event listening and matching the title bar to the app theme. No shell, fs or other plugin access.",
   "windows": ["main"],
   "permissions": [
     "core:event:allow-listen",
     "core:event:allow-unlisten",
+    "core:window:allow-set-theme",
     "allow-get-app-info",
     "allow-get-startup-status",
     "allow-list-operations",

@@ -79,7 +79,7 @@ function Details({
       {d.startupWarnings.length > 0 && (
         <section
           aria-label="PHP startup warnings"
-          className="flex gap-3 rounded-lg border border-warning/40 bg-warning-subtle p-4 text-sm"
+          className="flex gap-3 rounded-md border border-warning/40 bg-warning-subtle p-4 text-sm"
         >
           <TriangleAlert aria-hidden className="mt-0.5 size-5 shrink-0 text-warning" />
           <ul className="flex flex-col gap-1 font-mono text-xs text-fg">
@@ -92,7 +92,7 @@ function Details({
 
       <section
         aria-labelledby="ini-heading"
-        className="flex flex-col gap-2 rounded-lg border border-border p-4 text-sm"
+        className="flex flex-col gap-2 rounded-md border border-border p-4 text-sm"
       >
         <h2 id="ini-heading" className="font-semibold">
           php.ini

@@ -14,6 +14,7 @@ import type {
 } from "../../types/dto";
 import { OpenTerminalButton } from "../terminal/OpenTerminalButton";
 import { TERMINAL_LABELS } from "../terminal/terminal";
+import { LoadingState } from "../../components/LoadingState";
 
 const input = "rounded-md border border-border bg-surface px-2 py-1.5";
 
@@ -25,8 +26,8 @@ export interface PreferencesProps {
 
 export function SettingsSection({ id, title, children }: { id: string; title: string; children: ReactNode }) {
   return (
-    <section aria-labelledby={id} className="flex flex-col gap-3 rounded-lg border border-border p-4 text-sm">
-      <h2 id={id} className="font-semibold">
+    <section aria-labelledby={id} className="flex flex-col gap-3 rounded-md border border-border p-4 text-sm">
+      <h2 id={id} className="font-display text-base font-semibold">
         {title}
       </h2>
       {children}
@@ -310,7 +311,7 @@ export function PortSettings({ view, save }: PreferencesProps) {
 
       <div className="flex flex-col gap-2">
         <h3 className="text-fg-muted">Existing services</h3>
-        {services.status === "pending" && <p role="status">Loading services…</p>}
+        {services.status === "pending" && <LoadingState label="Loading services…" shape="inline" />}
         {services.status === "error" && <ErrorPanel error={services.error} onRetry={services.reload} />}
         {services.status === "success" &&
           (services.data.length === 0 ? (
@@ -395,7 +396,7 @@ export function StartupSettings({ view, save, onChanged }: PreferencesProps & { 
       <form onSubmit={run({ startServices: selected })} className="flex flex-col gap-2">
         <fieldset>
           <legend className="text-fg-muted">Start these services when Devluma opens</legend>
-          {services.status === "pending" && <p role="status">Loading services…</p>}
+          {services.status === "pending" && <LoadingState label="Loading services…" shape="inline" />}
           {services.status === "error" && <ErrorPanel error={services.error} onRetry={services.reload} />}
           {services.status === "success" &&
             (services.data.length === 0 ? (

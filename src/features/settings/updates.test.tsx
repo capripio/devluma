@@ -14,7 +14,7 @@ const settings = (overrides: Record<string, unknown> = {}) => ({
 
 describe("update settings", () => {
   it("is off until an address is set", async () => {
-    await renderApp("/settings");
+    await renderApp("/settings/updates");
     const section = await screen.findByRole("region", { name: "Updates" });
     expect(section).toHaveTextContent("Updates are off until an update address is set");
     expect(within(section).getByRole("button", { name: "Check for app update" })).toBeDisabled();
@@ -33,7 +33,7 @@ describe("update settings", () => {
       }),
       install_app_update: () => null,
     });
-    await renderApp("/settings", mock);
+    await renderApp("/settings/updates", mock);
     const section = await screen.findByRole("region", { name: "Updates" });
     await userEvent.click(within(section).getByRole("button", { name: "Check for app update" }));
     expect(await within(section).findByText(/is available/)).toHaveTextContent("0.2.0");
@@ -48,7 +48,7 @@ describe("update settings", () => {
   it("reports a verified catalog that is used after a restart", async () => {
     let pending: string | null = null;
     await renderApp(
-      "/settings",
+      "/settings/updates",
       createMockAdapter({
         ...defaultHandlers,
         get_update_settings: () =>

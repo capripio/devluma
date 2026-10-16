@@ -11,6 +11,7 @@ import { CATEGORY_LABELS } from "../../lib/format";
 import { useAsync } from "../../lib/useAsync";
 import { ARCHITECTURES, PACKAGE_CATEGORIES, type CatalogView, type PackageView } from "../../types/dto";
 import { INSTALL_OPERATION, installedVersions } from "./packages";
+import { LoadingState } from "../../components/LoadingState";
 
 type InstallFilter = "all" | "installed" | "not_installed";
 
@@ -24,11 +25,7 @@ export function RuntimesPage() {
         title="Runtimes & Packages"
         description="Install and verify PHP, Node.js, Python, web servers, databases and tools. Packages download separately from Devluma."
       />
-      {catalog.status === "pending" && (
-        <p role="status" className="text-sm text-fg-muted">
-          Loading catalog…
-        </p>
-      )}
+      {catalog.status === "pending" && <LoadingState label="Loading catalog…" shape="table" columns={5} />}
       {catalog.status === "error" && <ErrorPanel error={catalog.error} onRetry={catalog.reload} />}
       {catalog.status === "success" && <Catalog view={catalog.data} />}
     </>
@@ -131,7 +128,7 @@ function Catalog({ view }: { view: CatalogView }) {
           <Button onClick={clear}>Clear filters</Button>
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
+        <div className="overflow-x-auto rounded-md border border-border">
           <table className="w-full text-left text-sm">
             <caption className="sr-only">Packages in catalog {view.catalogVersion}</caption>
             <thead className="bg-surface-raised text-fg-muted">
@@ -180,7 +177,7 @@ function CatalogIssues({ view }: { view: CatalogView }) {
   return (
     <section
       aria-label="Catalog problems"
-      className="flex gap-3 rounded-lg border border-warning/40 bg-warning-subtle p-4 text-sm"
+      className="flex gap-3 rounded-md border border-warning/40 bg-warning-subtle p-4 text-sm"
     >
       <TriangleAlert aria-hidden className="mt-0.5 size-5 shrink-0 text-warning" />
       <div>

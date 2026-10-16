@@ -1,82 +1,120 @@
 @import "tailwindcss";
 
 /*
- * Semantic design tokens (design.md §3, ADR 0002). Defined once here and exposed to Tailwind
- * via @theme, so components use bg-surface / text-danger / border-border etc. — never raw
- * palette colors. Theme: `data-theme` on <html> ("light" | "dark"); absent = follow system.
+ * Semantic design tokens ("Stack Map", DESIGN.md; ADR 0002). Defined once here and exposed to
+ * Tailwind via @theme, so components use bg-surface / text-danger / border-border etc. — never
+ * raw palette colors. Light is porcelain, dark is midnight enamel; the four-plus line inks colour
+ * projects on the stack map. Theme: `data-theme` on <html> ("light" | "dark"); absent = follow
+ * system.
  */
 :root {
   color-scheme: light;
-  --dl-surface: #ffffff;
-  --dl-surface-raised: #f6f8fa;
-  --dl-surface-sunken: #eef1f4;
-  --dl-border: #d0d7de;
-  --dl-fg: #1b1f24;
-  --dl-fg-muted: #57606a;
-  --dl-accent: #0b5cad;
-  --dl-accent-hover: #094b8e;
+  --dl-surface: #fdfcf9;
+  --dl-surface-raised: #f6f3ec;
+  --dl-surface-sunken: #ece8de;
+  --dl-border: #dbd5c8;
+  --dl-border-strong: #a89f8c;
+  --dl-fg: #0f1b33;
+  --dl-fg-muted: #565046;
+  --dl-accent: #1f5fd1;
+  --dl-accent-hover: #184fb0;
   --dl-accent-fg: #ffffff;
-  --dl-accent-subtle: #e3eefa;
-  --dl-focus: #0b5cad;
-  --dl-success: #1a7f37;
-  --dl-success-subtle: #dafbe1;
-  --dl-warning: #9a6700;
-  --dl-warning-subtle: #fff8c5;
-  --dl-danger: #c3262d;
-  --dl-danger-hover: #a21f25;
-  --dl-danger-subtle: #ffebe9;
-  --dl-neutral: #57606a;
-  --dl-neutral-subtle: #eaeef2;
+  --dl-accent-subtle: #e1eafb;
+  --dl-focus: #1f5fd1;
+  --dl-marker: #d99500;
+  --dl-success: #1d7a43;
+  --dl-success-subtle: #dcf3e4;
+  --dl-warning: #8a5a00;
+  --dl-warning-subtle: #fff2cc;
+  --dl-danger: #c42b30;
+  --dl-danger-hover: #a82227;
+  --dl-danger-subtle: #fde4e4;
+  --dl-neutral: #565046;
+  --dl-neutral-subtle: #ebe6da;
+  --dl-delay: #d99500;
+  --dl-station: #ffffff;
+  --dl-station-ring: #0f1b33;
+  --dl-map: #fbfaf6;
+  --dl-line-1: #d32f34;
+  --dl-line-2: #2058c9;
+  --dl-line-3: #23864a;
+  --dl-line-4: #c98a00;
+  --dl-line-5: #128c88;
+  --dl-line-6: #b03a8d;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --dl-surface: #14171b;
-    --dl-surface-raised: #1c2026;
-    --dl-surface-sunken: #0f1215;
-    --dl-border: #343b44;
-    --dl-fg: #e6e8eb;
-    --dl-fg-muted: #9aa4af;
-    --dl-accent: #5aa2ec;
-    --dl-accent-hover: #7bb6f1;
-    --dl-accent-fg: #0b1520;
-    --dl-accent-subtle: #13283d;
-    --dl-focus: #7bb6f1;
-    --dl-success: #4ac26b;
-    --dl-success-subtle: #12301c;
-    --dl-warning: #d4a72c;
-    --dl-warning-subtle: #332a10;
-    --dl-danger: #f47067;
-    --dl-danger-hover: #f89089;
-    --dl-danger-subtle: #3d1a1a;
-    --dl-neutral: #9aa4af;
-    --dl-neutral-subtle: #262c33;
+    --dl-surface: #0f1b33;
+    --dl-surface-raised: #13213f;
+    --dl-surface-sunken: #0b1529;
+    --dl-border: #22345e;
+    --dl-border-strong: #3a5288;
+    --dl-fg: #eceae4;
+    --dl-fg-muted: #a9b5ca;
+    --dl-accent: #2d6cdf;
+    --dl-accent-hover: #4a85ec;
+    --dl-accent-fg: #ffffff;
+    --dl-accent-subtle: #1c3364;
+    --dl-focus: #9cc0ff;
+    --dl-marker: #f2a900;
+    --dl-success: #4cc77a;
+    --dl-success-subtle: #12301f;
+    --dl-warning: #f2b322;
+    --dl-warning-subtle: #3a2d07;
+    --dl-danger: #ff6b6e;
+    --dl-danger-hover: #ff8a8d;
+    --dl-danger-subtle: #3a1418;
+    --dl-neutral: #a9b5ca;
+    --dl-neutral-subtle: #1d2b4d;
+    --dl-delay: #f2a900;
+    --dl-station: #f4f1ea;
+    --dl-station-ring: #0b1529;
+    --dl-map: #0c172d;
+    --dl-line-1: #e03a3e;
+    --dl-line-2: #3b7bf0;
+    --dl-line-3: #2fa35a;
+    --dl-line-4: #f2a900;
+    --dl-line-5: #22b8b2;
+    --dl-line-6: #d85cb4;
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --dl-surface: #14171b;
-  --dl-surface-raised: #1c2026;
-  --dl-surface-sunken: #0f1215;
-  --dl-border: #343b44;
-  --dl-fg: #e6e8eb;
-  --dl-fg-muted: #9aa4af;
-  --dl-accent: #5aa2ec;
-  --dl-accent-hover: #7bb6f1;
-  --dl-accent-fg: #0b1520;
-  --dl-accent-subtle: #13283d;
-  --dl-focus: #7bb6f1;
-  --dl-success: #4ac26b;
-  --dl-success-subtle: #12301c;
-  --dl-warning: #d4a72c;
-  --dl-warning-subtle: #332a10;
-  --dl-danger: #f47067;
-  --dl-danger-hover: #f89089;
-  --dl-danger-subtle: #3d1a1a;
-  --dl-neutral: #9aa4af;
-  --dl-neutral-subtle: #262c33;
+  --dl-surface: #0f1b33;
+  --dl-surface-raised: #13213f;
+  --dl-surface-sunken: #0b1529;
+  --dl-border: #22345e;
+  --dl-border-strong: #3a5288;
+  --dl-fg: #eceae4;
+  --dl-fg-muted: #a9b5ca;
+  --dl-accent: #2d6cdf;
+  --dl-accent-hover: #4a85ec;
+  --dl-accent-fg: #ffffff;
+  --dl-accent-subtle: #1c3364;
+  --dl-focus: #9cc0ff;
+  --dl-marker: #f2a900;
+  --dl-success: #4cc77a;
+  --dl-success-subtle: #12301f;
+  --dl-warning: #f2b322;
+  --dl-warning-subtle: #3a2d07;
+  --dl-danger: #ff6b6e;
+  --dl-danger-hover: #ff8a8d;
+  --dl-danger-subtle: #3a1418;
+  --dl-neutral: #a9b5ca;
+  --dl-neutral-subtle: #1d2b4d;
+  --dl-delay: #f2a900;
+  --dl-station: #f4f1ea;
+  --dl-station-ring: #0b1529;
+  --dl-map: #0c172d;
+  --dl-line-1: #e03a3e;
+  --dl-line-2: #3b7bf0;
+  --dl-line-3: #2fa35a;
+  --dl-line-4: #f2a900;
+  --dl-line-5: #22b8b2;
+  --dl-line-6: #d85cb4;
 }
 
 @theme inline {
@@ -84,6 +122,7 @@
   --color-surface-raised: var(--dl-surface-raised);
   --color-surface-sunken: var(--dl-surface-sunken);
   --color-border: var(--dl-border);
+  --color-border-strong: var(--dl-border-strong);
   --color-fg: var(--dl-fg);
   --color-fg-muted: var(--dl-fg-muted);
   --color-accent: var(--dl-accent);
@@ -91,6 +130,7 @@
   --color-accent-fg: var(--dl-accent-fg);
   --color-accent-subtle: var(--dl-accent-subtle);
   --color-focus: var(--dl-focus);
+  --color-marker: var(--dl-marker);
   --color-success: var(--dl-success);
   --color-success-subtle: var(--dl-success-subtle);
   --color-warning: var(--dl-warning);
@@ -100,10 +140,17 @@
   --color-danger-subtle: var(--dl-danger-subtle);
   --color-neutral: var(--dl-neutral);
   --color-neutral-subtle: var(--dl-neutral-subtle);
-  --font-sans: system-ui, "Segoe UI", sans-serif;
+  --color-delay: var(--dl-delay);
+  --color-station: var(--dl-station);
+  --color-station-ring: var(--dl-station-ring);
+  --color-map: var(--dl-map);
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-display: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   --font-mono: "Cascadia Mono", Consolas, ui-monospace, monospace;
-  /* Sidebar collapses to an icon rail below the 1000px design target (design.md §2, §7). */
+  /* 1000px design target: list/detail panes sit side by side from here. */
   --breakpoint-wide: 62.5rem;
+  /* Default 1200px window: the main navigation shows labels; below it, an icon rail. */
+  --breakpoint-split: 75rem;
 }
 
 @layer base {
@@ -113,10 +160,61 @@
   }
   body {
     @apply bg-surface font-sans text-fg antialiased;
+    font-size: 0.875rem;
   }
   :focus-visible {
     outline: 2px solid var(--dl-focus);
     outline-offset: 2px;
+  }
+  /* Versions, ports, sizes and counts line up in columns. */
+  table,
+  progress,
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+  h1,
+  h2,
+  h3 {
+    text-wrap: balance;
+  }
+  /* Inventory tables read like a station board: small tracked caps over hairline-ruled rows. */
+  thead th {
+    font-size: 0.6875rem;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    color: var(--dl-fg-muted);
+  }
+  tbody tr {
+    transition: background-color 120ms;
+  }
+  tbody tr:hover {
+    background: color-mix(in srgb, var(--dl-surface-raised) 70%, transparent);
+  }
+  /* Browser surfaces carry the palette too. */
+  ::selection {
+    background: var(--dl-accent-subtle);
+    color: var(--dl-fg);
+  }
+  input,
+  textarea {
+    caret-color: var(--dl-accent);
+  }
+  * {
+    scrollbar-color: var(--dl-border-strong) transparent;
+    scrollbar-width: thin;
+  }
+  progress {
+    appearance: none;
+    height: 0.375rem;
+    border-radius: 9999px;
+    background: var(--dl-neutral-subtle);
+    overflow: hidden;
+  }
+  progress::-webkit-progress-bar {
+    background: var(--dl-neutral-subtle);
+  }
+  progress::-webkit-progress-value {
+    background: var(--dl-accent);
   }
   @media (prefers-reduced-motion: reduce) {
     *,
@@ -126,4 +224,24 @@
       transition-duration: 0.01ms !important;
     }
   }
+}
+
+@layer components {
+  /* Station-sign label: tracked semibold caps for section heads and map labels. */
+  .label-caps {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+}
+
+/* The one authored motion: a delayed line's dots crawl toward its terminus (reduced motion stops it). */
+@keyframes dl-delay-crawl {
+  to {
+    stroke-dashoffset: -26;
+  }
+}
+.delay-crawl {
+  animation: dl-delay-crawl 1.6s linear infinite;
 }

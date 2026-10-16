@@ -2,8 +2,8 @@
 //! can write the file) or inside the elevated helper — the same code either way.
 //!
 //! The request carries only the desired *managed entries* and the SHA-256 of the file the
-//! user previewed. The file itself is re-read here, so nothing outside Devluma's block can be
-//! changed even by a tampered request.
+//! user previewed. The file itself is re-read here, so nothing but Devluma's tagged loopback
+//! lines (`# managed by devluma`, ADR 0016) can be changed even by a tampered request.
 
 use std::ffi::OsStr;
 use std::os::windows::ffi::OsStrExt;
@@ -125,10 +125,7 @@ pub fn apply(hosts_path: &Path, backups_dir: &Path, req: &HostsRequest) -> Hosts
             "The hosts file contains text that isn't UTF-8; Devluma won't rewrite it. Edit it manually.",
         );
     };
-    let file = match HostsFile::parse(&text) {
-        Ok(f) => f,
-        Err(e) => return HostsResult::fail("VALIDATION_ERROR", e.to_string()),
-    };
+    let file = HostsFile::parse(&text);
     let new_text = match file.with_managed(&req.entries) {
         Ok(t) => t,
         Err(e) => return HostsResult::fail("VALIDATION_ERROR", e.to_string()),
@@ -273,7 +270,7 @@ pub fn helper_main(args: &[String], hosts_path: &Path) -> i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::hosts::BEGIN;
+    use crate::domain::hosts::TAG;
 
     const ORIGINAL: &str = "# Copyright (c) Microsoft\r\n127.0.0.1 localhost\r\n";
 
@@ -309,7 +306,10 @@ mod tests {
         );
         assert!(r.ok && r.changed, "{r:?}");
         let text = std::fs::read_to_string(&hosts).unwrap();
-        assert!(text.starts_with(ORIGINAL) && text.contains("127.0.0.1 shop.test\r\n"));
+        assert!(
+            text.starts_with(ORIGINAL)
+                && text.contains("127.0.0.1\tshop.test\t# managed by devluma\r\n")
+        );
         assert_eq!(
             std::fs::read_to_string(r.backup_path.unwrap()).unwrap(),
             ORIGINAL
@@ -377,7 +377,7 @@ mod tests {
 
         // Correct hash: applied, backup under <root>/backups/hosts.
         assert_eq!(helper_main(&args(&sha256_hex(&body)), &hosts), 0);
-        assert!(std::fs::read_to_string(&hosts).unwrap().contains(BEGIN));
+        assert!(std::fs::read_to_string(&hosts).unwrap().contains(TAG));
         assert_eq!(
             std::fs::read_dir(d.path().join("backups").join("hosts"))
                 .unwrap()

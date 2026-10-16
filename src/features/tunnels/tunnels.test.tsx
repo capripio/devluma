@@ -46,7 +46,7 @@ describe("ngrok settings", () => {
       set_ngrok_path: () => status({ path: String.raw`D:\laragon\bin\ngrok\ngrok.exe`, version: "3.35.0" }),
       set_ngrok_token: () => status({ tokenSaved: true }),
     });
-    const { container } = await renderApp("/settings", mock);
+    const { container } = await renderApp("/settings/sharing", mock);
     const section = await screen.findByRole("region", { name: "Sharing with ngrok" });
     expect(section).toHaveTextContent("Devluma doesn't download ngrok");
     expect(await axeViolations(container)).toEqual([]);

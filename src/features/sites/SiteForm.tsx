@@ -8,6 +8,7 @@ import { ipc } from "../../lib/ipc";
 import { toAppError, type AppError } from "../../lib/ipc/errors";
 import { useAsync } from "../../lib/useAsync";
 import type { ProjectView, SitePlan, SiteRequest, SiteView } from "../../types/dto";
+import { LoadingState } from "../../components/LoadingState";
 
 const PHP_KINDS = new Set(["laravel", "symfony", "wordpress", "php"]);
 
@@ -41,18 +42,14 @@ export function SiteForm({ existing, onDone }: SiteFormProps) {
     ]),
   );
   if (data.status === "pending") {
-    return (
-      <p role="status" className="text-sm text-fg-muted">
-        Loading projects and web servers…
-      </p>
-    );
+    return <LoadingState label="Loading projects and web servers…" shape="inline" />;
   }
   if (data.status === "error") return <ErrorPanel error={data.error} onRetry={data.reload} />;
   const [projects, services, suffix] = data.data;
   const webServers = services.filter((s) => s.lifecycleAdapter === "nginx");
   if (projects.length === 0 || webServers.length === 0) {
     return (
-      <div className="flex flex-col items-start gap-2 rounded-lg border border-border p-4 text-sm">
+      <div className="flex flex-col items-start gap-2 rounded-md border border-border p-4 text-sm">
         {projects.length === 0 && (
           <p>
             Add a project first on the{" "}
@@ -177,7 +174,7 @@ function Form({
     <form
       onSubmit={preview}
       aria-label={existing ? `Re-apply ${existing.domain}` : "Add site"}
-      className="flex flex-col gap-3 rounded-lg border border-border p-4 text-sm"
+      className="flex flex-col gap-3 rounded-md border border-border p-4 text-sm"
     >
       <div className="flex flex-wrap gap-4">
         <label className="flex flex-col gap-1">

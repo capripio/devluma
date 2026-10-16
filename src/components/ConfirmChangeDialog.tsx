@@ -10,7 +10,7 @@ interface ConfirmChangeDialogProps {
   title: string;
   /** Exact target, e.g. a full path. Shown in monospace and copyable via selection. */
   target: string;
-  /** What will change and its consequence — not "Are you sure?" (design.md §6). */
+  /** What will change and its consequence — not "Are you sure?" (docs/design-brief.md §6). */
   impact: ReactNode;
   backup?: ReactNode;
   rollback?: ReactNode;
@@ -66,8 +66,8 @@ export function ConfirmChangeDialog({
   return (
     <Dialog.Root open={open} onOpenChange={handleOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 bg-black/40" />
-        <Dialog.Content className="fixed top-1/2 left-1/2 flex max-h-[85vh] w-[min(36rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 overflow-y-auto rounded-lg border border-border bg-surface p-5 shadow-xl">
+        <Dialog.Overlay className="fixed inset-0 bg-[rgb(5_10_22/0.55)]" />
+        <Dialog.Content className="fixed top-1/2 left-1/2 flex max-h-[85vh] w-[min(36rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col gap-4 overflow-y-auto rounded-md border border-border-strong bg-surface-raised p-5 shadow-[0_24px_64px_-12px_rgb(0_0_0/0.5)]">
           <Dialog.Title className="text-lg font-semibold">{title}</Dialog.Title>
           <Dialog.Description asChild>
             <div className="flex flex-col gap-3 text-sm">

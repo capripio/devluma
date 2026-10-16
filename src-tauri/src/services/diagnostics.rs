@@ -1,4 +1,4 @@
-//! Diagnostic export (trd.md: diagnostics never contain secrets; design.md: show exactly
+//! Diagnostic export (trd.md: diagnostics never contain secrets; docs/design-brief.md: show exactly
 //! what's included). The export is built from the same sections the preview shows, so what
 //! the user reviews is byte-for-byte what is written.
 //!

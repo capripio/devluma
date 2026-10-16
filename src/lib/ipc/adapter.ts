@@ -2,7 +2,19 @@
 // `IpcAdapter`, so components and tests run without a live desktop runtime.
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { AppError } from "./errors";
+
+/**
+ * Match the native title bar to the app theme (`null` follows Windows). Cosmetic, so a
+ * failure is ignored; outside the desktop runtime it does nothing.
+ */
+export function setNativeWindowTheme(theme: "light" | "dark" | null): void {
+  if (!isTauri()) return;
+  getCurrentWindow()
+    .setTheme(theme)
+    .catch(() => undefined);
+}
 
 export type Unlisten = () => void;
 

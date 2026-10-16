@@ -1,6 +1,6 @@
 //! Devluma's narrow privilege helper (ADR 0007). Launched elevated, once per action, by the
 //! main app. It accepts exactly one request file — verified by hash, inside a Devluma staging
-//! folder — and can only replace Devluma's own block in the system hosts file with loopback
+//! folder — and can only change Devluma's own tagged lines in the system hosts file, to loopback
 //! entries. Everything else is in `devluma_lib::platform::windows::hosts_file`.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]

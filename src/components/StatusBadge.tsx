@@ -28,7 +28,7 @@ interface StatusSpec {
   spin?: boolean;
 }
 
-// Status is always icon + text, never color alone (design.md §7).
+// Status is always icon + text, never color alone (docs/design-brief.md §7).
 const SERVICE: Record<ServiceState, StatusSpec> = {
   not_installed: { label: "Not installed", tone: "neutral", icon: CircleDashed },
   stopped: { label: "Stopped", tone: "neutral", icon: CircleStop },

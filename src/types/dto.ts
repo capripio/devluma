@@ -292,19 +292,22 @@ export const hostsPlanSchema = z.object({
 });
 export type HostsPlan = z.infer<typeof hostsPlanSchema>;
 
+const hostsLineSchema = z.object({
+  line: z.number().int(),
+  ip: z.string(),
+  hostnames: z.array(z.string()),
+  comment: z.string().nullable(),
+  managed: z.boolean(),
+});
 export const hostsViewSchema = z.object({
   path: z.string(),
   needsElevation: z.boolean(),
-  entries: z.array(
-    z.object({
-      line: z.number().int(),
-      ip: z.string(),
-      hostnames: z.array(z.string()),
-      comment: z.string().nullable(),
-      managed: z.boolean(),
-    }),
-  ),
-  raw: z.string(),
+  /** Devluma's own lines only (tagged `# managed by devluma`). */
+  entries: z.array(hostsLineSchema),
+  /** Other entries in the file; Devluma never lists or edits them. */
+  otherCount: z.number().int().nonnegative(),
+  /** Devluma's tag on a non-loopback line: left alone and reported. */
+  strayTags: z.array(hostsLineSchema),
   backups: z.array(
     z.object({
       id: z.string(),
@@ -318,7 +321,6 @@ export const hostsViewSchema = z.object({
       changes: z.array(z.object({ domain: z.string(), ipAddress: z.string(), action: z.string() })),
     }),
   ),
-  problem: z.string().nullable(),
 });
 export type HostsView = z.infer<typeof hostsViewSchema>;
 
