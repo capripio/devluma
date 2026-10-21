@@ -59,7 +59,7 @@ fn harness() -> Harness {
     let db = Arc::new(db());
     let project_dir = paths.www.join("shop");
     std::fs::create_dir(&project_dir).unwrap();
-    let project = crate::services::projects::create(&db, &paths, "shop", "shop").unwrap();
+    let project = crate::services::projects::create(&db, &paths, "shop", "shop", &[]).unwrap();
     let worker = dir.path().join("worker.exe");
     std::fs::copy(std::env::current_exe().unwrap(), &worker).unwrap();
     let launcher = Launcher {

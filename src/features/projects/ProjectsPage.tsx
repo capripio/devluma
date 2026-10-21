@@ -13,7 +13,15 @@ import type { Project, ProjectView, SiteView, SwitchRequest } from "../../types/
 import { useOnOperationsSettled } from "../../app/operations";
 import { useStartupStatus } from "../../app/startup";
 import { RuntimeSwitchDialog } from "../runtimes/RuntimeSwitchDialog";
+import { useServices } from "../services/useServices";
 import { SiteForm, slugify, suggestDomain } from "../sites/SiteForm";
+import {
+  ChooseServicesForm,
+  defaultServiceIds,
+  ProjectServiceList,
+  ServiceChecklist,
+  startAllSummary,
+} from "./ProjectServices";
 import { OpenTerminalButton } from "../terminal/OpenTerminalButton";
 import { terminalOpenedMessage } from "../terminal/terminal";
 import { LoadingState } from "../../components/LoadingState";
@@ -22,6 +30,8 @@ const SITE_OPERATIONS = new Set(["apply_site", "remove_site"]);
 
 export function ProjectsPage() {
   const projects = useAsync(ipc.listProjects);
+  // "Start all" also covers the web servers of a project's sites.
+  useOnOperationsSettled((op) => SITE_OPERATIONS.has(op.operationType), projects.refresh);
   const [adding, setAdding] = useState(false);
   // Set after adding a project with "Also create a site": the usual preview → apply flow.
   const [siteFor, setSiteFor] = useState<{ project: Project; domain: string } | null>(null);
@@ -105,9 +115,14 @@ function AddProjectForm({
   const [folder, setFolder] = useState<string | null>(null);
   const [domain, setDomain] = useState<string | null>(null);
   const [createSite, setCreateSite] = useState(true);
+  const services = useServices();
+  // Preselected once the services load: the first of each kind; `null` until the user edits.
+  const [serviceIds, setServiceIds] = useState<string[] | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<AppError | null>(null);
 
+  const serviceIdsValue =
+    serviceIds ?? (services.status === "success" ? defaultServiceIds(services.data) : []);
   const folderValue = folder ?? slugify(name);
   const domainValue =
     domain ?? (name.trim() ? suggestDomain(name, suffix.status === "success" ? suffix.data : "test") : "");
@@ -118,7 +133,7 @@ function AddProjectForm({
     setPending(true);
     setError(null);
     try {
-      const project = await ipc.createProject(name, folderValue);
+      const project = await ipc.createProject(name, folderValue, serviceIdsValue);
       onAdded(project, createSite ? domainValue : null);
     } catch (err) {
       setError(toAppError(err));
@@ -178,6 +193,14 @@ function AddProjectForm({
           />
         </label>
       </div>
+      {services.status === "success" && (
+        <ServiceChecklist
+          services={services.data}
+          selected={serviceIdsValue}
+          onChange={setServiceIds}
+          legend={'Services this project uses ("Start all" starts them)'}
+        />
+      )}
       {error && <ErrorPanel error={error} />}
       <div className="flex gap-2">
         <Button type="submit" variant="primary" pending={pending}>
@@ -199,8 +222,16 @@ function runtimeLabel(rt: ProjectView["runtimes"][number]): string {
 function ProjectsTable({ projects, onChanged }: { projects: ProjectView[]; onChanged: () => void }) {
   const [changing, setChanging] = useState<{ project: ProjectView; packageId: string } | null>(null);
   const [removing, setRemoving] = useState<ProjectView | null>(null);
-  // Result of the last "Open terminal" / "Open website", shown under that project.
-  const [note, setNote] = useState<{ projectId: string; message?: string; error?: AppError } | null>(null);
+  const [choosing, setChoosing] = useState<ProjectView | null>(null);
+  // Result of the last "Open terminal" / "Open website" / "Start all", shown under that project.
+  const [note, setNote] = useState<{
+    projectId: string;
+    message?: string;
+    problems?: string[];
+    error?: AppError;
+  } | null>(null);
+  const services = useServices();
+  const serviceList = services.status === "success" ? services.data : [];
   const sites = useAsync(ipc.listSites);
   useOnOperationsSettled((op) => SITE_OPERATIONS.has(op.operationType), sites.refresh);
   const sitesOf = (p: ProjectView) =>
@@ -222,8 +253,26 @@ function ProjectsTable({ projects, onChanged }: { projects: ProjectView[]; onCha
     );
   };
 
+  const startAll = (p: ProjectView) => {
+    setNote({ projectId: p.id, message: "Starting…" });
+    ipc.startProjectServices(p.id).then(
+      (r) => setNote({ projectId: p.id, ...startAllSummary(r) }),
+      (e: unknown) => setNote({ projectId: p.id, error: toAppError(e) }),
+    );
+  };
+
   return (
     <>
+      {choosing && (
+        <ChooseServicesForm
+          project={choosing}
+          services={serviceList}
+          onDone={(saved) => {
+            setChoosing(null);
+            if (saved) onChanged();
+          }}
+        />
+      )}
       <div className="overflow-x-auto rounded-md border border-border">
         <table className="w-full text-left text-sm">
           <thead className="bg-surface-raised text-fg-muted">
@@ -236,6 +285,9 @@ function ProjectsTable({ projects, onChanged }: { projects: ProjectView[]; onCha
                   {rt.packageName}
                 </th>
               ))}
+              <th scope="col" className="px-3 py-2 font-medium">
+                Services
+              </th>
               <th scope="col" className="px-3 py-2 font-medium">
                 Actions
               </th>
@@ -258,6 +310,11 @@ function ProjectsTable({ projects, onChanged }: { projects: ProjectView[]; onCha
                       ) : (
                         <span className="text-fg-muted">{note.message}</span>
                       )}
+                      {note.problems?.map((m) => (
+                        <p key={m} className="text-warning">
+                          {m}
+                        </p>
+                      ))}
                     </div>
                   )}
                 </td>
@@ -273,6 +330,26 @@ function ProjectsTable({ projects, onChanged }: { projects: ProjectView[]; onCha
                     </Button>
                   </td>
                 ))}
+                <td className="px-3 py-2">
+                  <ProjectServiceList project={p} services={serviceList} />
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    <Button
+                      variant="primary"
+                      onClick={() => startAll(p)}
+                      disabled={p.startServiceIds.length === 0}
+                      aria-label={`Start all services for ${p.name}`}
+                    >
+                      Start all
+                    </Button>
+                    <Button
+                      onClick={() => setChoosing(p)}
+                      disabled={choosing !== null}
+                      aria-label={`Choose services for ${p.name}`}
+                    >
+                      Choose
+                    </Button>
+                  </div>
+                </td>
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-2">
                     {sitesOf(p).map((s, _, all) => (

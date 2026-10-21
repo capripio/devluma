@@ -207,6 +207,11 @@ pub fn set_paths(
 
 /// Deletes the instance record (and its dependency rows). Files are handled by the caller.
 pub fn delete(conn: &Connection, id: &str) -> DbResult<()> {
+    // Projects that used the service simply stop listing it.
+    conn.execute(
+        "DELETE FROM project_service_links WHERE service_instance_id = ?1",
+        [id],
+    )?;
     if conn.execute("DELETE FROM service_instances WHERE id = ?1", [id])? == 0 {
         return Err(DbError::NotFound { entity: "service" });
     }

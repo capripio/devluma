@@ -37,6 +37,7 @@ const service = (overrides: Record<string, unknown> = {}) => ({
   packageId: "nginx",
   packageName: "Nginx",
   version: "1.30.5",
+  portConflicts: [],
   ...overrides,
 });
 
@@ -144,6 +145,51 @@ describe("services list", () => {
     ).toBeInTheDocument();
   });
 
+  it("warns before starting when another program holds the port", async () => {
+    await renderApp(
+      "/services/s1",
+      createMockAdapter({
+        ...defaultHandlers,
+        list_services: () => [
+          service({ port: 80, portConflicts: [{ port: 80, usedBy: "httpd.exe (PID 1234)" }] }),
+        ],
+      }),
+    );
+    expect(
+      await screen.findByText(/Port 80 is in use by httpd\.exe \(PID 1234\)\. This service can't start/),
+    ).toBeInTheDocument();
+    expect(screen.getByTitle("Port 80 is in use by httpd.exe (PID 1234).")).toHaveTextContent(
+      "Port in use by another program",
+    );
+  });
+
+  it("checks the port of a new service and names the program using it", async () => {
+    const mock = createMockAdapter({
+      ...defaultHandlers,
+      list_packages: () => installedCatalog,
+      check_port: (args) =>
+        args?.port === 80
+          ? { port: 80, usedBy: "Windows (PID 4, HTTP.sys — for example IIS)", assignedTo: null }
+          : { port: args?.port, usedBy: null, assignedTo: args?.port === 3306 ? "db" : null },
+    });
+    await renderApp("/services", mock);
+    await userEvent.click((await screen.findAllByRole("button", { name: "Add service" }))[0]!);
+    const form = await screen.findByRole("form", { name: "Add service" });
+    // Nginx defaults to port 80, which Windows' HTTP.sys holds here.
+    expect(
+      await within(form).findByText(/Port 80 is in use by Windows \(PID 4, HTTP\.sys/),
+    ).toBeInTheDocument();
+    await userEvent.type(within(form).getByLabelText("Port"), "8090");
+    await waitFor(() => expect(within(form).queryByText(/Port 80 is in use/)).not.toBeInTheDocument());
+    await userEvent.clear(within(form).getByLabelText("Port"));
+    await userEvent.type(within(form).getByLabelText("Port"), "3306");
+    expect(
+      await within(form).findByText(
+        'Port 3306 is already assigned to the service "db". Choose another port.',
+      ),
+    ).toBeInTheDocument();
+  });
+
   it("creates a database service and is explicit about root and loopback", async () => {
     const mock = createMockAdapter({
       ...defaultHandlers,
@@ -223,6 +269,7 @@ describe("services list", () => {
       packageId: "mailpit",
       packageName: "Mailpit",
       version: "1.31.5",
+      portConflicts: [],
     });
     const mock = createMockAdapter({
       ...defaultHandlers,

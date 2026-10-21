@@ -43,6 +43,7 @@ const catalog = catalogView([
     displayName: "MariaDB",
     category: "database",
   }),
+  packageView("mailpit", [versionView("mailpit", "1.29.2")], { displayName: "Mailpit", category: "tool" }),
 ]);
 
 describe("first-run setup", () => {
@@ -82,13 +83,14 @@ describe("first-run setup", () => {
       expect(mock.calls.find((c) => c.command === "choose_storage")?.args).toEqual({ folder: null }),
     );
 
-    // Tools: the PHP preset picks PHP (newest), Nginx and MariaDB.
+    // Tools: the PHP preset picks PHP (newest), Nginx, MariaDB and Mailpit.
     const stack = await screen.findByRole("region", { name: "What do you want to download?" });
     expect(await axeViolations(container)).toEqual([]);
     await userEvent.click(within(stack).getByLabelText("PHP web stack"));
     expect(within(stack).getByLabelText("PHP version")).toHaveValue("8.5.11");
     expect(within(stack).getByLabelText("Nginx")).toBeChecked();
     expect(within(stack).getByLabelText("MariaDB")).toBeChecked();
+    expect(within(stack).getByLabelText("Mailpit")).toBeChecked();
     // Web servers are pick-one.
     await userEvent.click(within(stack).getByLabelText("Apache httpd"));
     expect(within(stack).getByLabelText("Nginx")).not.toBeChecked();
@@ -107,6 +109,7 @@ describe("first-run setup", () => {
           items: [
             { packageId: "php", version: "8.5.11" },
             { packageId: "mariadb", version: "11.8.9" },
+            { packageId: "mailpit", version: "1.29.2" },
             { packageId: "nginx", version: "1.30.5" },
           ],
         },

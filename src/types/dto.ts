@@ -222,8 +222,28 @@ export const projectViewSchema = projectSchema.extend({
       effective: selectionSchema.nullable(),
     }),
   ),
+  /** Services the user chose for the project. */
+  serviceIds: z.array(z.string()),
+  /** What "Start all" starts: the chosen services plus what the project's sites need. */
+  startServiceIds: z.array(z.string()),
 });
 export type ProjectView = z.infer<typeof projectViewSchema>;
+
+// `services/projects.rs` `StartAll`.
+export const startAllSchema = z.object({
+  started: z.array(z.object({ serviceName: z.string(), operationId: z.string() })),
+  alreadyRunning: z.array(z.string()),
+  notStarted: z.array(z.object({ serviceName: z.string(), message: z.string() })),
+});
+export type StartAll = z.infer<typeof startAllSchema>;
+
+// `commands/services.rs` `PortStatus`.
+export const portStatusSchema = z.object({
+  port: z.number().int(),
+  usedBy: z.string().nullable(),
+  assignedTo: z.string().nullable(),
+});
+export type PortStatus = z.infer<typeof portStatusSchema>;
 
 // `commands/services.rs` / `services/supervisor`.
 export const serviceViewSchema = z.object({
@@ -250,6 +270,8 @@ export const serviceViewSchema = z.object({
   packageId: z.string(),
   packageName: z.string(),
   version: z.string(),
+  /** For a service that isn't running: its ports another program is already using. */
+  portConflicts: z.array(z.object({ port: z.number().int(), usedBy: z.string() })),
 });
 export type ServiceView = z.infer<typeof serviceViewSchema>;
 

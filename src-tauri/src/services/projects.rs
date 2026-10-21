@@ -3,10 +3,16 @@
 //! its files.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 
+use crate::domain::adapter::AdapterId;
 use crate::error::{ErrorCode, IpcError};
 use crate::persistence::Database;
 use crate::persistence::projects::{self, Project, ProjectFields};
+use crate::persistence::services::{self, ServiceInstance};
+use crate::persistence::sites;
+use crate::platform::windows::ports;
+use crate::services::supervisor::Supervisor;
 use crate::state::DataPaths;
 
 fn invalid(msg: impl Into<String>) -> IpcError {
@@ -38,12 +44,14 @@ fn project_dir(folder: &str, paths: &DataPaths) -> Result<PathBuf, IpcError> {
 }
 
 /// Registers `www\<folder>` as a project, creating the folder if it doesn't exist yet. An
-/// existing folder (for example a cloned repository) is used as it is.
+/// existing folder (for example a cloned repository) is used as it is. `service_ids` are the
+/// services the project uses ("Start all").
 pub fn create(
     db: &Database,
     paths: &DataPaths,
     name: &str,
     folder: &str,
+    service_ids: &[String],
 ) -> Result<Project, IpcError> {
     let name = name.trim();
     if name.is_empty() {
@@ -85,7 +93,7 @@ pub fn create(
                 "That folder is already added as a project.".into(),
             ));
         }
-        projects::create(
+        let project = projects::create(
             c,
             &ProjectFields {
                 name: name.to_owned(),
@@ -93,12 +101,116 @@ pub fn create(
                 project_type: detect(Path::new(&root)).kind.map(str::to_owned),
                 ..Default::default()
             },
-        )
+        )?;
+        projects::set_service_ids(c, &project.id, service_ids)?;
+        Ok(project)
     })
     .map_err(|e| {
         undo();
         IpcError::from(e)
     })
+}
+
+/// Services "Start all" starts for a project: the ones the user chose, plus the web server
+/// and PHP backend each of its sites needs. In order, without duplicates.
+pub fn services_to_start(
+    c: &rusqlite::Connection,
+    project_id: &str,
+) -> crate::persistence::DbResult<Vec<ServiceInstance>> {
+    let all = services::list(c)?;
+    let mut ids = projects::service_ids(c, project_id)?;
+    for site in sites::list(c)?
+        .iter()
+        .filter(|s| s.project_id == project_id)
+    {
+        ids.push(site.web_server_service_id.clone());
+        if let Some(php) = all.iter().find(|s| {
+            Some(&s.package_installation_id) == site.php_installation_id.as_ref()
+                && s.lifecycle_adapter == AdapterId::Php.as_str()
+        }) {
+            ids.push(php.id.clone());
+        }
+    }
+    let mut seen = std::collections::HashSet::new();
+    ids.retain(|id| seen.insert(id.clone()));
+    Ok(ids
+        .iter()
+        .filter_map(|id| all.iter().find(|s| &s.id == id).cloned())
+        .collect())
+}
+
+/// What "Start all" did, per service.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartAll {
+    /// Starts that were begun (each finishes as its own operation).
+    pub started: Vec<StartedService>,
+    pub already_running: Vec<String>,
+    /// Not started, with the reason (port used by another program, wrong state, …).
+    pub not_started: Vec<NotStarted>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct StartedService {
+    pub service_name: String,
+    pub operation_id: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NotStarted {
+    pub service_name: String,
+    pub message: String,
+}
+
+/// Starts every service the project needs that isn't running yet. A service whose port is
+/// taken by another program is not started; the message says which program has it.
+pub fn start_all(
+    db: &Database,
+    supervisor: &Arc<Supervisor>,
+    project_id: &str,
+) -> Result<StartAll, IpcError> {
+    let todo = db.read(|c| {
+        projects::get(c, project_id)?;
+        services_to_start(c, project_id)
+    })?;
+    if todo.is_empty() {
+        return Err(invalid(
+            "This project has no services yet. Choose the services it uses first.",
+        ));
+    }
+    let mut out = StartAll::default();
+    for svc in todo {
+        let name = svc.instance_name.clone();
+        if svc.observed_state.is_live() {
+            out.already_running.push(name);
+            continue;
+        }
+        let taken = [svc.port, svc.admin_port]
+            .into_iter()
+            .flatten()
+            .filter_map(|p| u16::try_from(p).ok())
+            .find_map(|p| ports::used_by(p).map(|who| (p, who)));
+        if let Some((port, who)) = taken {
+            out.not_started.push(NotStarted {
+                service_name: name,
+                message: format!("Port {port} is already used by {who}."),
+            });
+            continue;
+        }
+        match supervisor.start(&svc.id) {
+            Ok((operation_id, _)) => out.started.push(StartedService {
+                service_name: name,
+                operation_id,
+            }),
+            Err(e) => out.not_started.push(NotStarted {
+                service_name: name,
+                message: e.message,
+            }),
+        }
+    }
+    Ok(out)
 }
 
 /// What a project folder looks like, judged only by which files exist (app_flow.md §6:
@@ -218,7 +330,7 @@ mod tests {
         let db = db();
 
         // A missing folder is created.
-        let p = create(&db, &paths, " Shop ", "shop").unwrap();
+        let p = create(&db, &paths, " Shop ", "shop", &[]).unwrap();
         assert_eq!(p.name, "Shop");
         assert!(paths.www.join("shop").is_dir());
         assert!(!p.root_path.starts_with(r"\\?\"), "{}", p.root_path);
@@ -227,11 +339,11 @@ mod tests {
         // An existing folder is used as it is, and its type detected.
         std::fs::create_dir_all(paths.www.join(r"clients\blog")).unwrap();
         std::fs::write(paths.www.join(r"clients\blog\index.html"), "").unwrap();
-        let blog = create(&db, &paths, "Blog", "clients/blog").unwrap();
+        let blog = create(&db, &paths, "Blog", "clients/blog", &[]).unwrap();
         assert_eq!(blog.project_type.as_deref(), Some("static"));
 
         assert!(
-            create(&db, &paths, "Again", "SHOP")
+            create(&db, &paths, "Again", "SHOP", &[])
                 .unwrap_err()
                 .message
                 .contains("already added")
@@ -246,13 +358,13 @@ mod tests {
             "con",
             "a:b",
         ] {
-            assert!(create(&db, &paths, "x", bad).is_err(), "{bad}");
+            assert!(create(&db, &paths, "x", bad, &[]).is_err(), "{bad}");
         }
         assert!(!dir.path().join("escape").exists());
         assert!(!dir.path().join("abs").exists());
         std::fs::write(paths.www.join("file.txt"), "").unwrap();
-        assert!(create(&db, &paths, "x", "file.txt").is_err());
-        assert!(create(&db, &paths, "  ", "other").is_err());
+        assert!(create(&db, &paths, "x", "file.txt", &[]).is_err());
+        assert!(create(&db, &paths, "  ", "other", &[]).is_err());
         assert!(!paths.www.join("other").exists());
     }
 
@@ -260,10 +372,10 @@ mod tests {
     fn a_failed_create_removes_only_the_folders_it_made() {
         let (_dir, paths) = paths();
         let db = db();
-        create(&db, &paths, "Shop", "shop").unwrap();
+        create(&db, &paths, "Shop", "shop", &[]).unwrap();
         std::fs::write(paths.www.join(r"shop\keep.txt"), "").unwrap();
         // The same folder written differently: rejected as a duplicate, folder kept.
-        assert!(create(&db, &paths, "Shop", r"shop\.").is_err());
+        assert!(create(&db, &paths, "Shop", r"shop\.", &[]).is_err());
         assert!(paths.www.join(r"shop\keep.txt").is_file());
 
         // A junction inside www that leads elsewhere is refused and the new folders removed.
@@ -277,7 +389,7 @@ mod tests {
             .output()
             .unwrap();
         assert!(out.status.success());
-        let err = create(&db, &paths, "x", r"linked\new\deep").unwrap_err();
+        let err = create(&db, &paths, "x", r"linked\new\deep", &[]).unwrap_err();
         assert!(err.message.contains("outside www"), "{}", err.message);
         assert!(!outside.path().join("new").exists());
     }

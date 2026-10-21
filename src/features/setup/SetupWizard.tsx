@@ -23,8 +23,8 @@ const PRESETS: { id: string; label: string; description: string; packages: strin
   {
     id: "php",
     label: "PHP web stack",
-    description: "PHP, Nginx and MariaDB — for Laravel, WordPress, Symfony.",
-    packages: ["php", "nginx", "mariadb"],
+    description: "PHP, Nginx, MariaDB and Mailpit — for Laravel, WordPress, Symfony.",
+    packages: ["php", "nginx", "mariadb", "mailpit"],
   },
   { id: "node", label: "Node.js", description: "Node.js LTS with npm.", packages: ["node"] },
   { id: "python", label: "Python", description: "Python with pip and venv.", packages: ["python"] },

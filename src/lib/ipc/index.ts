@@ -9,6 +9,8 @@ import {
   phpDetailsSchema,
   projectSchema,
   projectViewSchema,
+  portStatusSchema,
+  startAllSchema,
   operationStartedSchema,
   serviceDetailsSchema,
   appUpdateSchema,
@@ -108,7 +110,11 @@ export const ipc = {
     call("create_php_ini", { installationId, template }, phpDetailsSchema),
   listProjects: () => call("list_projects", undefined, z.array(projectViewSchema)),
   /** `folder` is relative to the projects folder (`www`); it is created when missing. */
-  createProject: (name: string, folder: string) => call("create_project", { name, folder }, projectSchema),
+  createProject: (name: string, folder: string, serviceIds: string[]) =>
+    call("create_project", { name, folder, serviceIds }, projectSchema),
+  setProjectServices: (projectId: string, serviceIds: string[]) =>
+    call("set_project_services", { projectId, serviceIds }, z.null()),
+  startProjectServices: (projectId: string) => call("start_project_services", { projectId }, startAllSchema),
   removeProject: (projectId: string) => call("remove_project", { projectId }, z.null()),
   openProjectTerminal: (projectId: string) =>
     call("open_project_terminal", { projectId }, terminalOpenedSchema),
@@ -150,6 +156,7 @@ export const ipc = {
   uninstallPackage: (installationId: string) => call("uninstall_package", { installationId }, z.unknown()),
   setServicePorts: (serviceId: string, port: number, adminPort: number | null) =>
     call("set_service_ports", { serviceId, port, adminPort }, z.unknown()),
+  checkPort: (port: number) => call("check_port", { port }, portStatusSchema),
   listDatabaseServices: () => call("list_database_services", undefined, z.array(databaseServiceSchema)),
   listDatabases: (serviceId: string) => call("list_databases", { serviceId }, z.array(z.string())),
   listDatabaseBackups: () => call("list_database_backups", undefined, z.array(backupRecordSchema)),

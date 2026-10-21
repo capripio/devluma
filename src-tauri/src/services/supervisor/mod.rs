@@ -284,19 +284,9 @@ impl Supervisor {
 
         let _ = journal.progress(op, "Checking ports", None, None);
         for port in std::iter::once(ctx.port).chain(ctx.admin_port) {
-            if ports::is_free(port) {
+            let Some(who) = ports::used_by(port) else {
                 continue;
-            }
-            let who = ports::listener_owner(port).map_or_else(
-                || "another program".to_owned(),
-                |o| {
-                    format!(
-                        "{} (PID {})",
-                        o.image.unwrap_or_else(|| "a process".into()),
-                        o.pid
-                    )
-                },
-            );
+            };
             return Err(record_error(failure(
                 ErrorCode::PortInUse,
                 format!(

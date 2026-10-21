@@ -8,6 +8,7 @@ use crate::domain::adapter::{AdapterId, ServiceRole};
 use crate::error::IpcResult;
 use crate::persistence::installations;
 use crate::persistence::services::{self, ServiceInstance};
+use crate::platform::windows::ports;
 use crate::services::supervisor::{CreateServiceRequest, ServiceDetails};
 use crate::state::AppState;
 
@@ -20,6 +21,30 @@ pub struct ServiceView {
     pub package_id: String,
     pub package_name: String,
     pub version: String,
+    /// For a service that isn't running: its ports another program is already using, so it
+    /// can't start until that program stops or the port changes.
+    pub port_conflicts: Vec<PortConflict>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PortConflict {
+    pub port: u16,
+    /// "httpd.exe (PID 1234)".
+    pub used_by: String,
+}
+
+/// Ports of a stopped service that another program is listening on.
+fn port_conflicts(service: &ServiceInstance) -> Vec<PortConflict> {
+    if service.observed_state.is_live() {
+        return Vec::new();
+    }
+    [service.port, service.admin_port]
+        .into_iter()
+        .flatten()
+        .filter_map(|p| u16::try_from(p).ok())
+        .filter_map(|port| ports::used_by(port).map(|used_by| PortConflict { port, used_by }))
+        .collect()
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -50,6 +75,7 @@ pub async fn list_services(state: State<'_, AppState>) -> IpcResult<Vec<ServiceV
                 ServiceView {
                     role: AdapterId::parse(&service.lifecycle_adapter)
                         .and_then(AdapterId::service_role),
+                    port_conflicts: port_conflicts(&service),
                     service,
                     package_id,
                     package_name,
@@ -169,6 +195,34 @@ pub async fn open_service_ui(state: State<'_, AppState>, service_id: String) -> 
             )
         })?;
         Ok(url)
+    })
+    .await
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PortStatus {
+    pub port: u16,
+    /// Program listening on the port, if any: "httpd.exe (PID 1234)".
+    pub used_by: Option<String>,
+    /// Devluma service the port is already assigned to, if any.
+    pub assigned_to: Option<String>,
+}
+
+/// Whether a port is free for a new service (for the Add service form).
+#[tauri::command]
+pub async fn check_port(state: State<'_, AppState>, port: u16) -> IpcResult<PortStatus> {
+    let db = state.db()?;
+    blocking(move || {
+        let assigned_to = db.read(services::list)?.into_iter().find_map(|s| {
+            (s.port == Some(i64::from(port)) || s.admin_port == Some(i64::from(port)))
+                .then_some(s.instance_name)
+        });
+        Ok(PortStatus {
+            port,
+            used_by: ports::used_by(port),
+            assigned_to,
+        })
     })
     .await
 }

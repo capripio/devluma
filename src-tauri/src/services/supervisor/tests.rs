@@ -544,6 +544,79 @@ fn creation_validates_ports_and_names() {
 }
 
 #[test]
+fn start_all_starts_a_projects_services_and_skips_taken_ports() {
+    use crate::persistence::projects::{self, ProjectFields};
+    use crate::services::projects::start_all;
+    let w = world();
+    let other = TcpListener::bind("127.0.0.1:0").unwrap();
+    let taken = other.local_addr().unwrap().port();
+    let web = w.create("web", taken, "serve");
+    let db_svc = w.create("db", free_port(), "serve");
+    let project = |name: &str, services: &[String]| {
+        w.db.write(|c| {
+            let p = projects::create(
+                c,
+                &ProjectFields {
+                    name: name.into(),
+                    root_path: format!(r"D:\code\{name}"),
+                    ..Default::default()
+                },
+            )?;
+            projects::set_service_ids(c, &p.id, services)?;
+            Ok(p.id)
+        })
+        .unwrap()
+    };
+    let shop = project("shop", &[web.clone(), db_svc.clone()]);
+
+    let r = start_all(&w.db, &w.sup, &shop).unwrap();
+    assert_eq!(r.started.len(), 1, "{r:?}");
+    assert_eq!(r.started[0].service_name, "db");
+    // The service whose port another program holds is skipped, naming that program.
+    assert_eq!(r.not_started.len(), 1, "{r:?}");
+    let msg = &r.not_started[0].message;
+    assert!(
+        msg.contains(&format!("Port {taken}"))
+            && msg.contains(&format!("PID {}", std::process::id())),
+        "{msg}"
+    );
+    assert_eq!(w.svc(&web).observed_state, ServiceState::Stopped);
+    assert!(w.wait_for_state(&db_svc, ServiceState::Running));
+    w.remember_jobs();
+
+    // Running services are reported, not started again.
+    let again = start_all(&w.db, &w.sup, &shop).unwrap();
+    assert_eq!(again.already_running, ["db"]);
+    assert!(again.started.is_empty());
+
+    // A site's web server counts even when it wasn't chosen; no services at all is an error.
+    let blog = project("blog", &[]);
+    let site = crate::persistence::sites::test_support::insert(&w.db, &blog, "blog.test", 80);
+    w.db.write(|c| {
+        Ok(c.execute(
+            "UPDATE sites SET web_server_service_id = ?1 WHERE id = ?2",
+            [&db_svc, &site],
+        )?)
+    })
+    .unwrap();
+    let ids: Vec<String> =
+        w.db.read(|c| crate::services::projects::services_to_start(c, &blog))
+            .unwrap()
+            .into_iter()
+            .map(|s| s.id)
+            .collect();
+    assert_eq!(ids, std::slice::from_ref(&db_svc));
+    let empty = project("empty", &[]);
+    assert!(start_all(&w.db, &w.sup, &empty).is_err());
+
+    assert_eq!(
+        w.run(w.sup.stop(&db_svc)).status,
+        OperationStatus::Succeeded
+    );
+    drop(other);
+}
+
+#[test]
 fn ports_change_only_while_stopped_and_never_collide() {
     let w = world();
     let (p1, p2, p3) = (free_port(), free_port(), free_port());

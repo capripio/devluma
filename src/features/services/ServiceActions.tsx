@@ -3,6 +3,7 @@ import { Button } from "../../components/Button";
 import { ipc } from "../../lib/ipc";
 import { toAppError, type AppError } from "../../lib/ipc/errors";
 import type { ServiceView } from "../../types/dto";
+import { portConflictText } from "./portConflicts";
 
 type Action = "start" | "stop" | "restart";
 
@@ -37,8 +38,15 @@ export function ServiceActions({ service }: { service: ServiceView }) {
   };
 
   const label = (verb: string) => `${verb} ${service.instanceName}`;
+  const conflict = portConflictText(service);
   return (
     <div className="flex flex-col gap-1">
+      {conflict && (
+        <p role="status" className="text-sm text-warning">
+          {conflict} This service can&apos;t start until that program stops or you choose another port.
+          Devluma never stops other programs.
+        </p>
+      )}
       <div className="flex flex-wrap gap-2">
         {canStart && (
           <Button

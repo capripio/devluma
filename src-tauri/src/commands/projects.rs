@@ -18,6 +18,10 @@ pub struct ProjectView {
     pub runtimes: Vec<ProjectRuntime>,
     /// File-based detection (type, suggested document root); nothing is executed.
     pub detection: crate::services::projects::Detection,
+    /// Services the user chose for this project.
+    pub service_ids: Vec<String>,
+    /// What "Start all" starts: the chosen services plus what the project's sites need.
+    pub start_service_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -58,10 +62,18 @@ pub async fn list_projects(state: State<'_, AppState>) -> IpcResult<Vec<ProjectV
                         .collect::<crate::persistence::DbResult<_>>()?;
                     let detection =
                         crate::services::projects::detect(std::path::Path::new(&project.root_path));
+                    let service_ids = projects::service_ids(c, &project.id)?;
+                    let start_service_ids =
+                        crate::services::projects::services_to_start(c, &project.id)?
+                            .into_iter()
+                            .map(|s| s.id)
+                            .collect();
                     Ok(ProjectView {
                         project,
                         runtimes,
                         detection,
+                        service_ids,
+                        start_service_ids,
                     })
                 })
                 .collect::<crate::persistence::DbResult<Vec<_>>>()
@@ -76,9 +88,34 @@ pub async fn create_project(
     state: State<'_, AppState>,
     name: String,
     folder: String,
+    service_ids: Vec<String>,
 ) -> IpcResult<Project> {
     let (db, paths) = (state.db()?, state.paths.clone());
-    blocking(move || crate::services::projects::create(&db, &paths, &name, &folder)).await
+    blocking(move || crate::services::projects::create(&db, &paths, &name, &folder, &service_ids))
+        .await
+}
+
+/// Replaces the services a project uses.
+#[tauri::command]
+pub async fn set_project_services(
+    state: State<'_, AppState>,
+    project_id: String,
+    service_ids: Vec<String>,
+) -> IpcResult<()> {
+    let db = state.db()?;
+    blocking(move || Ok(db.write(|c| projects::set_service_ids(c, &project_id, &service_ids))?))
+        .await
+}
+
+/// Starts every service the project needs that isn't running. Services whose port another
+/// program holds are skipped and reported.
+#[tauri::command]
+pub async fn start_project_services(
+    state: State<'_, AppState>,
+    project_id: String,
+) -> IpcResult<crate::services::projects::StartAll> {
+    let (db, sup) = (state.db()?, state.supervisor()?);
+    blocking(move || crate::services::projects::start_all(&db, &sup, &project_id)).await
 }
 
 /// Removes the project from Devluma (metadata, pins and links). The folder is not touched.

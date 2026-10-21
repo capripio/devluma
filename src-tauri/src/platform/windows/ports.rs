@@ -69,6 +69,28 @@ pub fn listener_owner(port: u16) -> Option<PortOwner> {
         })
 }
 
+/// Who is using `port`, for messages: "httpd.exe (PID 1234)". `None` if the port is free.
+pub fn used_by(port: u16) -> Option<String> {
+    if is_free(port) {
+        return None;
+    }
+    Some(listener_owner(port).map_or_else(|| "another program".to_owned(), |o| describe(&o)))
+}
+
+/// "httpd.exe (PID 1234)". PID 4 is Windows itself: its HTTP.sys driver, which serves IIS
+/// and other HTTP.sys services.
+pub fn describe(owner: &PortOwner) -> String {
+    if owner.pid == 4 {
+        return "Windows (PID 4, HTTP.sys — for example IIS or the World Wide Web Publishing Service)"
+            .to_owned();
+    }
+    format!(
+        "{} (PID {})",
+        owner.image.as_deref().unwrap_or("a process"),
+        owner.pid
+    )
+}
+
 /// Bounded TCP health check against loopback.
 pub fn accepts_connections(port: u16, timeout: Duration) -> bool {
     TcpStream::connect_timeout(
@@ -91,8 +113,21 @@ mod tests {
         assert_eq!(owner.pid, std::process::id());
         assert!(owner.image.unwrap().to_lowercase().ends_with(".exe"));
         assert!(accepts_connections(port, Duration::from_secs(1)));
+        let who = used_by(port).unwrap();
+        assert!(
+            who.ends_with(&format!("(PID {})", std::process::id())),
+            "{who}"
+        );
         drop(listener);
         assert!(is_free(port));
+        assert_eq!(used_by(port), None);
+        assert!(
+            describe(&PortOwner {
+                pid: 4,
+                image: None
+            })
+            .contains("HTTP.sys")
+        );
         assert!(!accepts_connections(port, Duration::from_millis(200)));
     }
 }

@@ -20,6 +20,8 @@ const project = {
   createdAt: "2026-10-12T10:00:00.000Z",
   updatedAt: "2026-10-12T10:00:00.000Z",
   lastOpenedAt: null,
+  serviceIds: [],
+  startServiceIds: [],
   detection: {
     kind: "laravel",
     label: "Laravel",
@@ -53,6 +55,7 @@ const nginx = {
   packageId: "nginx",
   packageName: "Nginx",
   version: "1.30.5",
+  portConflicts: [],
 };
 
 const plan = {

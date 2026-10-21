@@ -1,11 +1,11 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router";
 import { Button } from "../../components/Button";
 import { ErrorPanel } from "../../components/ErrorPanel";
 import { ipc } from "../../lib/ipc";
 import { toAppError, type AppError } from "../../lib/ipc/errors";
 import { useAsync } from "../../lib/useAsync";
-import type { PackageView } from "../../types/dto";
+import type { PackageView, PortStatus } from "../../types/dto";
 import { servicePackageInfo } from "./servicePackages";
 import { LoadingState } from "../../components/LoadingState";
 
@@ -157,6 +157,8 @@ export function AddServiceForm({ onDone }: { onDone: () => void }) {
           </label>
         )}
       </div>
+      <PortCheck port={effectivePort} />
+      {effectiveAdminPort ? <PortCheck port={effectiveAdminPort} /> : null}
       {info.note && <p className="text-fg-muted">{info.note}</p>}
       {isDb && (
         <>
@@ -187,4 +189,42 @@ export function AddServiceForm({ onDone }: { onDone: () => void }) {
       </div>
     </form>
   );
+}
+
+/** Says whether `port` is already taken: by another program (with its name and PID) or by a
+ *  Devluma service. Checked shortly after the user stops typing. */
+function PortCheck({ port }: { port: number }) {
+  const [status, setStatus] = useState<PortStatus | null>(null);
+  useEffect(() => {
+    if (!Number.isInteger(port) || port < 1 || port > 65535) return;
+    let current = true;
+    const timer = setTimeout(() => {
+      ipc.checkPort(port).then(
+        (s) => current && setStatus(s),
+        () => {},
+      );
+    }, 300);
+    return () => {
+      current = false;
+      clearTimeout(timer);
+    };
+  }, [port]);
+
+  if (!status || status.port !== port) return null;
+  if (status.assignedTo) {
+    return (
+      <p role="status" className="text-warning">
+        Port {port} is already assigned to the service &quot;{status.assignedTo}&quot;. Choose another port.
+      </p>
+    );
+  }
+  if (status.usedBy) {
+    return (
+      <p role="status" className="text-warning">
+        Port {port} is in use by {status.usedBy}. The service can be created, but it won&apos;t start until
+        that program stops. Devluma never stops other programs.
+      </p>
+    );
+  }
+  return null;
 }

@@ -16,8 +16,8 @@ export interface ServicePackageInfo {
 }
 
 const PACKAGES: Record<string, ServicePackageInfo> = {
-  nginx: { defaultName: "web", defaultPort: 8080 },
-  apache: { defaultName: "apache", defaultPort: 8081 },
+  nginx: { defaultName: "web", defaultPort: 80 },
+  apache: { defaultName: "apache", defaultPort: 80 },
   mariadb: {
     defaultName: "db",
     defaultPort: 3306,
@@ -56,7 +56,7 @@ const PORT_SETTING: Partial<Record<string, keyof DefaultPorts>> = {
 
 /** Info for `packageId`, with the default ports chosen in Settings when given. */
 export function servicePackageInfo(packageId: string, ports?: DefaultPorts): ServicePackageInfo {
-  const info = PACKAGES[packageId] ?? { defaultName: "service", defaultPort: 8080 };
+  const info = PACKAGES[packageId] ?? { defaultName: "service", defaultPort: 80 };
   const key = PORT_SETTING[packageId];
   if (!ports || !key) return info;
   return {

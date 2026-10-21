@@ -105,8 +105,8 @@ pub struct DefaultPorts {
 impl Default for DefaultPorts {
     fn default() -> Self {
         Self {
-            nginx: 8080,
-            apache: 8081,
+            nginx: 80,
+            apache: 80,
             mariadb: 3306,
             postgresql: 5432,
             mongodb: 27017,

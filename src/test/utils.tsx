@@ -210,8 +210,8 @@ export function preferencesView(
       httpsPort: null,
       terminal: "power_shell",
       defaultPorts: {
-        nginx: 8080,
-        apache: 8081,
+        nginx: 80,
+        apache: 80,
         mariadb: 3306,
         postgresql: 5432,
         mongodb: 27017,

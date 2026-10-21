@@ -14,6 +14,8 @@ function project(id: string, name: string, php?: { installationId: string; versi
     createdAt: "2026-10-01T00:00:00Z",
     updatedAt: "2026-10-01T00:00:00Z",
     lastOpenedAt: null,
+    serviceIds: [],
+    startServiceIds: [],
     detection: {
       kind: "laravel",
       label: "Laravel",
@@ -57,6 +59,7 @@ function service(id: string, over: Partial<ServiceView>): ServiceView {
     packageId: "nginx",
     packageName: "Nginx",
     version: "1.27.4",
+    portConflicts: [],
     ...over,
   };
 }
@@ -95,6 +98,7 @@ const phpCgi = service("phpcgi", {
   packageInstallationId: "php83",
   packageName: "PHP",
   version: "8.3.14",
+  portConflicts: [],
   port: 9083,
 });
 const maria = service("maria", { role: "database", packageName: "MariaDB", version: "11.4.5", port: 3306 });

@@ -43,6 +43,8 @@ const project = (overrides: Record<string, unknown> = {}) => ({
   createdAt: "2026-10-11T10:00:00.000Z",
   updatedAt: "2026-10-11T10:00:00.000Z",
   lastOpenedAt: null,
+  serviceIds: [],
+  startServiceIds: [],
   detection: {
     kind: "laravel",
     label: "Laravel",
@@ -61,6 +63,34 @@ const project = (overrides: Record<string, unknown> = {}) => ({
       },
     },
   ],
+  ...overrides,
+});
+
+const svc = (id: string, serviceType: string, overrides: Record<string, unknown> = {}) => ({
+  id,
+  packageInstallationId: `i-${id}`,
+  instanceName: id,
+  serviceType,
+  lifecycleAdapter: "nginx",
+  desiredState: "stopped",
+  observedState: "stopped",
+  port: 80,
+  bindAddress: "127.0.0.1",
+  configPath: null,
+  dataPath: null,
+  pid: null,
+  processStartedAt: null,
+  healthStatus: "unknown",
+  lastExitCode: null,
+  lastErrorCode: null,
+  jobName: null,
+  adminPort: null,
+  updatedAt: "2026-10-11T10:00:00.000Z",
+  role: "web_server",
+  packageId: "nginx",
+  packageName: "Nginx",
+  version: "1.30.5",
+  portConflicts: [],
   ...overrides,
 });
 
@@ -126,8 +156,85 @@ describe("projects", () => {
     expect(mock.calls.filter((c) => c.command === "create_project").at(-1)?.args).toEqual({
       name: "My Shop",
       folder: "clients\\shop",
+      serviceIds: [],
     });
     expect(screen.queryByRole("form", { name: "Add site" })).not.toBeInTheDocument();
+  });
+
+  it("asks which services a new project uses, preselecting one of each kind", async () => {
+    const mock = createMockAdapter({
+      ...defaultHandlers,
+      list_services: () => [
+        svc("web", "web_server"),
+        svc("apache", "web_server", { packageName: "Apache httpd", port: 8081 }),
+        svc("db", "database", { role: "database", packageName: "MariaDB", port: 3306 }),
+        svc("php-8.4", "fast_cgi", { role: "fast_cgi", packageName: "PHP", port: 9000 }),
+      ],
+      create_project: () => ({ ...project(), runtimes: undefined }),
+    });
+    await renderApp("/projects", mock);
+    await userEvent.click((await screen.findAllByRole("button", { name: "Add project" }))[0]!);
+    const form = screen.getByRole("form", { name: "Add project" });
+    const services = await within(form).findByRole("group", { name: /Services this project uses/ });
+    expect(within(services).getByLabelText(/^web/)).toBeChecked();
+    expect(within(services).getByLabelText(/^apache/)).not.toBeChecked();
+    expect(within(services).getByLabelText(/^db/)).toBeChecked();
+    // PHP backends come with sites; they aren't chosen by hand.
+    expect(within(services).queryByLabelText(/^php-8\.4/)).not.toBeInTheDocument();
+
+    await userEvent.click(within(services).getByLabelText(/^db/));
+    await userEvent.type(within(form).getByLabelText("Name"), "Shop");
+    await userEvent.click(within(form).getByLabelText("Also create a site at"));
+    await userEvent.click(within(form).getByRole("button", { name: "Add project" }));
+    await waitFor(() =>
+      expect(mock.calls.find((c) => c.command === "create_project")?.args).toEqual({
+        name: "Shop",
+        folder: "shop",
+        serviceIds: ["web"],
+      }),
+    );
+  });
+
+  it("starts all of a project's services and names the program holding a port", async () => {
+    const mock = createMockAdapter({
+      ...defaultHandlers,
+      list_projects: () => [project({ serviceIds: ["web", "db"], startServiceIds: ["web", "db"] })],
+      list_services: () => [
+        svc("web", "web_server", { portConflicts: [{ port: 80, usedBy: "httpd.exe (PID 1234)" }] }),
+        svc("db", "database", { role: "database", packageName: "MariaDB", port: 3306 }),
+      ],
+      start_project_services: () => ({
+        started: [{ serviceName: "db", operationId: "op-1" }],
+        alreadyRunning: [],
+        notStarted: [{ serviceName: "web", message: "Port 80 is already used by httpd.exe (PID 1234)." }],
+      }),
+      set_project_services: () => null,
+    });
+    const { container } = await renderApp("/projects", mock);
+    const table = await screen.findByRole("table");
+    // The taken port is shown before anything is started.
+    expect(await within(table).findByText("Port 80 is in use by httpd.exe (PID 1234).")).toBeInTheDocument();
+    expect(await axeViolations(container)).toEqual([]);
+
+    await userEvent.click(within(table).getByRole("button", { name: "Start all services for Shop" }));
+    expect(await within(table).findByText("Starting db.")).toBeInTheDocument();
+    expect(
+      within(table).getByText("web wasn't started: Port 80 is already used by httpd.exe (PID 1234)."),
+    ).toBeInTheDocument();
+    expect(mock.calls.find((c) => c.command === "start_project_services")?.args).toEqual({ projectId: "p1" });
+
+    // The services can be changed later.
+    await userEvent.click(within(table).getByRole("button", { name: "Choose services for Shop" }));
+    const choose = screen.getByRole("form", { name: "Services for Shop" });
+    await userEvent.click(within(choose).getByLabelText(/^web/));
+    await userEvent.click(within(choose).getByRole("button", { name: "Save" }));
+    await waitFor(() =>
+      expect(mock.calls.find((c) => c.command === "set_project_services")?.args).toEqual({
+        projectId: "p1",
+        serviceIds: ["db"],
+      }),
+    );
+    expect(screen.queryByRole("form", { name: "Services for Shop" })).not.toBeInTheDocument();
   });
 
   it("offers the site for a new project with its domain filled in", async () => {
@@ -162,6 +269,7 @@ describe("projects", () => {
           packageId: "nginx",
           packageName: "Nginx",
           version: "1.30.5",
+          portConflicts: [],
         },
       ],
       create_project: () => {

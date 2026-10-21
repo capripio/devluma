@@ -205,6 +205,43 @@ pub fn unpin_runtime(
     Ok(previous)
 }
 
+/// `project_service_links.purpose` for services the user chose for a project.
+const USES: &str = "uses";
+
+/// Services the user said the project uses, in service order.
+pub fn service_ids(conn: &Connection, project_id: &str) -> DbResult<Vec<String>> {
+    let mut stmt = conn.prepare(
+        "SELECT l.service_instance_id FROM project_service_links l
+           JOIN service_instances s ON s.id = l.service_instance_id
+         WHERE l.project_id = ?1 AND l.purpose = ?2
+         ORDER BY s.service_type, s.instance_name",
+    )?;
+    Ok(stmt
+        .query_map(params![project_id, USES], |r| r.get(0))?
+        .collect::<Result<_, _>>()?)
+}
+
+/// Replaces the services a project uses. Unknown service ids are rejected.
+pub fn set_service_ids(conn: &Connection, project_id: &str, ids: &[String]) -> DbResult<()> {
+    get(conn, project_id)?;
+    for id in ids {
+        super::services::get(conn, id)?;
+    }
+    conn.execute(
+        "DELETE FROM project_service_links WHERE project_id = ?1 AND purpose = ?2",
+        params![project_id, USES],
+    )?;
+    let ts = now();
+    for id in ids {
+        conn.execute(
+            "INSERT OR IGNORE INTO project_service_links (project_id, service_instance_id, purpose, created_at)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![project_id, id, USES, ts],
+        )?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -293,6 +330,47 @@ mod tests {
             .unwrap();
         assert_eq!(pins, 0);
         assert!(db.read(|c| installations::get(c, &inst)).is_ok());
+    }
+
+    #[test]
+    fn projects_remember_their_services_until_either_is_removed() {
+        use crate::persistence::services::{self, NewService};
+        let db = db();
+        db.write(|c| {
+            let p = create(c, &fields("a"))?;
+            let i = installed(c, "nginx", "1.27.0", "n")?;
+            let svc = |name: &'static str, ty: &'static str| {
+                services::create(
+                    c,
+                    &NewService {
+                        package_installation_id: &i.id,
+                        instance_name: name,
+                        service_type: ty,
+                        lifecycle_adapter: "nginx",
+                        ..Default::default()
+                    },
+                )
+            };
+            let (web, db_svc) = (svc("web", "web_server")?, svc("db", "database")?);
+            set_service_ids(
+                c,
+                &p.id,
+                &[web.id.clone(), db_svc.id.clone(), web.id.clone()],
+            )?;
+            assert_eq!(service_ids(c, &p.id)?, [db_svc.id.clone(), web.id.clone()]);
+            assert!(set_service_ids(c, &p.id, &["missing".into()]).is_err());
+
+            // Removing a service drops it from the project; removing the project drops all.
+            services::delete(c, &web.id)?;
+            assert_eq!(service_ids(c, &p.id)?, std::slice::from_ref(&db_svc.id));
+            remove(c, &p.id)?;
+            let left: i64 = c.query_row("SELECT COUNT(*) FROM project_service_links", [], |r| {
+                r.get(0)
+            })?;
+            assert_eq!(left, 0);
+            Ok(())
+        })
+        .unwrap();
     }
 
     #[test]

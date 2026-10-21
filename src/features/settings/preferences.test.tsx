@@ -167,6 +167,7 @@ describe("Settings preferences", () => {
           packageId: "nginx",
           packageName: "Nginx",
           version: "1.30.5",
+          portConflicts: [],
         },
       ],
       set_launch_at_login: (args) => {

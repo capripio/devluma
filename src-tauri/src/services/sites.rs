@@ -414,17 +414,7 @@ impl SiteService {
                 ),
             ));
         }
-        if !crate::platform::windows::ports::is_free(port) {
-            let who = crate::platform::windows::ports::listener_owner(port).map_or_else(
-                || "another program".to_owned(),
-                |o| {
-                    format!(
-                        "{} (PID {})",
-                        o.image.unwrap_or_else(|| "a process".into()),
-                        o.pid
-                    )
-                },
-            );
+        if let Some(who) = crate::platform::windows::ports::used_by(port) {
             return Err(failure(
                 ErrorCode::PortInUse,
                 format!(
@@ -1283,7 +1273,7 @@ mod live {
             "<?php echo 'hello from PHP ', PHP_VERSION;",
         )
         .unwrap();
-        let project = crate::services::projects::create(&db, &paths, "Shop", "shop").unwrap();
+        let project = crate::services::projects::create(&db, &paths, "Shop", "shop", &[]).unwrap();
         assert_eq!(project.project_type.as_deref(), Some("laravel"));
 
         let (hosts_svc, hosts_file) = crate::services::hosts::test_support::service(

@@ -12,6 +12,7 @@ import { AddServiceForm } from "./AddServiceForm";
 import { ServiceActions } from "./ServiceActions";
 import { ServiceDetail } from "./ServiceDetailPage";
 import { HEALTH_LABELS } from "./ServiceInspector";
+import { portConflictText } from "./portConflicts";
 import { useServices } from "./useServices";
 import { ipc } from "../../lib/ipc";
 import { useAsync } from "../../lib/useAsync";
@@ -90,6 +91,14 @@ function ServicesSplit() {
                         </span>
                         {s.port !== null && <span className="shrink-0 font-mono">· :{s.port}</span>}
                       </span>
+                      {portConflictText(s) && (
+                        <span
+                          className="truncate text-xs font-normal text-warning"
+                          title={portConflictText(s)!}
+                        >
+                          Port in use by another program
+                        </span>
+                      )}
                       <LineChips lines={linesFor(s)} />
                     </span>
                     <ServiceStatusBadge state={s.observedState} />
@@ -208,6 +217,9 @@ function ServiceGroup({ title, services }: { title: string; services: ServiceVie
                   <td className="px-3 py-2 font-mono">
                     {s.port ?? "—"}
                     {s.adminPort !== null && <div className="text-xs text-fg-muted">UI {s.adminPort}</div>}
+                    {portConflictText(s) && (
+                      <p className="mt-1 max-w-xs font-sans text-xs text-warning">{portConflictText(s)}</p>
+                    )}
                   </td>
                   <td className="px-3 py-2 text-fg-muted">
                     {HEALTH_LABELS[s.healthStatus] ?? s.healthStatus}
