@@ -23,7 +23,7 @@ export function RuntimesPage() {
     <>
       <PageHeader
         title="Runtimes & Packages"
-        description="Install and verify PHP, Node.js, Python, web servers, databases and tools. Packages download separately from Devluma."
+        description="Install PHP, Node.js, Python, web servers and databases."
       />
       {catalog.status === "pending" && <LoadingState label="Loading catalog…" shape="table" columns={5} />}
       {catalog.status === "error" && <ErrorPanel error={catalog.error} onRetry={catalog.reload} />}
@@ -45,7 +45,7 @@ function Catalog({ view }: { view: CatalogView }) {
         <EmptyState
           icon={Package}
           title="The package catalog is empty"
-          description="This build of Devluma doesn't include any reviewed packages yet. Reviewed manifests for PHP and other tools arrive in upcoming updates."
+          description="This build doesn't include any reviewed packages yet. They arrive with updates."
         />
       </>
     );

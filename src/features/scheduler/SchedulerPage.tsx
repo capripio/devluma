@@ -133,10 +133,7 @@ function NewJobLink({ primary = false }: { primary?: boolean }) {
 function Overview({ jobs }: { jobs: JobView[] }) {
   return (
     <>
-      <PageHeader
-        title="Scheduler"
-        description="Recurring project tasks (Laravel's scheduler, PHP scripts or commands) that Devluma runs while it's open."
-      />
+      <PageHeader title="Scheduler" description="Recurring project tasks, run while Devluma is open." />
       <Commands>
         <NewJobLink primary />
       </Commands>
@@ -144,7 +141,7 @@ function Overview({ jobs }: { jobs: JobView[] }) {
         <EmptyState
           icon={CalendarClock}
           title="No scheduled jobs yet"
-          description="Run php artisan schedule:run every minute for Laravel (Pulse, queues, reports), or any script on a schedule, without setting up Windows Task Scheduler."
+          description="Run Laravel's schedule:run every minute, or any script on a schedule."
           action={<NewJobLink primary />}
         />
       ) : (

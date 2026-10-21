@@ -37,10 +37,7 @@ export function DatabasesPage() {
   );
   return (
     <>
-      <PageHeader
-        title="Databases"
-        description="Database servers, connection details, backups and restores."
-      />
+      <PageHeader title="Databases" description="Connection details, backups and restores." />
       {services.status === "pending" && <LoadingState label="Loading databases…" shape="table" columns={5} />}
       {services.status === "error" && <ErrorPanel error={services.error} onRetry={services.reload} />}
       {services.status === "success" &&
@@ -48,7 +45,7 @@ export function DatabasesPage() {
           <EmptyState
             icon={Database}
             title="No database services"
-            description="Install MariaDB, PostgreSQL or MongoDB from Runtimes & Packages, then add a service for it on the Services page. Existing data folders are detected and never initialized or overwritten."
+            description="Install MariaDB, PostgreSQL or MongoDB, then add it on the Services page. Existing data is never overwritten."
           />
         ) : (
           services.data.map((d) => <DatabaseCard key={d.serviceId} db={d} onChanged={refresh} />)

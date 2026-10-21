@@ -146,7 +146,7 @@ function ServiceInventory() {
     <div className="flex flex-col gap-5 px-7 py-6">
       <PageHeader
         title="Services"
-        description="Web servers and databases managed by Devluma. They listen on 127.0.0.1 only."
+        description="Web servers, databases and mail, reachable from this computer only."
         actions={addButton}
       />
       {adding && <AddServiceForm onDone={() => setAdding(false)} />}
@@ -158,7 +158,7 @@ function ServiceInventory() {
               <EmptyState
                 icon={Server}
                 title="No services yet"
-                description="Install a web server, database or Mailpit from Runtimes & Packages, then add a service to run it."
+                description="Install a web server, database or Mailpit, then add it here."
                 action={addButton}
               />
             )
@@ -225,7 +225,7 @@ function ServiceGroup({ title, services }: { title: string; services: ServiceVie
                     {HEALTH_LABELS[s.healthStatus] ?? s.healthStatus}
                   </td>
                   <td className="px-3 py-2">
-                    <ServiceActions service={s} />
+                    <ServiceActions service={s} compact />
                   </td>
                 </tr>
               );

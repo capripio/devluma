@@ -6,6 +6,7 @@ import {
   catalogView,
   createMockAdapter,
   defaultHandlers,
+  chooseFromMenu,
   packageView,
   preferencesView,
   renderApp,
@@ -210,21 +211,20 @@ describe("projects", () => {
       }),
       set_project_services: () => null,
     });
-    const { container } = await renderApp("/projects", mock);
-    const table = await screen.findByRole("table");
+    const { container } = await renderApp("/projects/p1", mock);
     // The taken port is shown before anything is started.
-    expect(await within(table).findByText("Port 80 is in use by httpd.exe (PID 1234).")).toBeInTheDocument();
+    expect(await screen.findByText("Port 80 is in use by httpd.exe (PID 1234).")).toBeInTheDocument();
     expect(await axeViolations(container)).toEqual([]);
 
-    await userEvent.click(within(table).getByRole("button", { name: "Start all services for Shop" }));
-    expect(await within(table).findByText("Starting db.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Start all services for Shop" }));
+    expect(await screen.findByText("Starting db.")).toBeInTheDocument();
     expect(
-      within(table).getByText("web wasn't started: Port 80 is already used by httpd.exe (PID 1234)."),
+      screen.getByText("web wasn't started: Port 80 is already used by httpd.exe (PID 1234)."),
     ).toBeInTheDocument();
     expect(mock.calls.find((c) => c.command === "start_project_services")?.args).toEqual({ projectId: "p1" });
 
     // The services can be changed later.
-    await userEvent.click(within(table).getByRole("button", { name: "Choose services for Shop" }));
+    await userEvent.click(screen.getByRole("button", { name: "Choose services for Shop" }));
     const choose = screen.getByRole("form", { name: "Services for Shop" });
     await userEvent.click(within(choose).getByLabelText(/^web/));
     await userEvent.click(within(choose).getByRole("button", { name: "Save" }));
@@ -296,14 +296,21 @@ describe("projects", () => {
     expect(screen.queryByRole("form", { name: "Add site" })).not.toBeInTheDocument();
   });
 
-  it("lists projects with their effective PHP and passes a11y checks", async () => {
+  it("lists projects calmly, then shows one project's details", async () => {
     const { container } = await renderApp(
       "/projects",
       createMockAdapter({ ...defaultHandlers, list_projects: () => [project()] }),
     );
     const table = await screen.findByRole("table");
-    expect(within(table).getByText("8.3.35 (default)")).toBeInTheDocument();
-    expect(within(table).getByText("D:\\code\\shop")).toBeInTheDocument();
+    expect(within(table).getByText("8.3.35")).toBeInTheDocument();
+    // No action buttons in the overview: actions live with the project.
+    expect(within(table).queryAllByRole("button")).toEqual([]);
+    expect(await axeViolations(container)).toEqual([]);
+
+    await userEvent.click(within(table).getByRole("link", { name: "Shop" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "Shop" })).toBeInTheDocument();
+    expect(screen.getByText("D:\\code\\shop")).toBeInTheDocument();
+    expect(screen.getByText("(global default)")).toBeInTheDocument();
     expect(await axeViolations(container)).toEqual([]);
   });
 
@@ -341,10 +348,10 @@ describe("projects", () => {
     });
     await renderApp("/projects", mock);
     const table = await screen.findByRole("table");
-    // Only the project with a site gets the button.
+    // The domain itself opens the site; only the project with a site has one.
     expect(await within(table).findAllByRole("button", { name: "Open shop.test" })).toHaveLength(1);
     await userEvent.click(within(table).getByRole("button", { name: "Open shop.test" }));
-    expect(await within(table).findByText("Opened http://shop.test/ in your browser.")).toBeInTheDocument();
+    expect(await screen.findByText("Opened http://shop.test/ in your browser.")).toBeInTheDocument();
     expect(mock.calls.find((c) => c.command === "open_site")?.args).toEqual({ siteId: "s1" });
   });
 
@@ -359,22 +366,20 @@ describe("projects", () => {
         },
       });
     const { unmount } = await renderApp(
-      "/projects",
+      "/projects/p1",
       createMockAdapter({ ...defaultHandlers, list_projects: () => [python(null)] }),
     );
-    const table = await screen.findByRole("table");
-    expect(table).toHaveTextContent("No virtual environment yet");
-    expect(table).toHaveTextContent("python -m venv .venv");
+    expect(await screen.findByText(/No virtual environment yet/)).toHaveTextContent("python -m venv .venv");
     unmount();
 
     await renderApp(
-      "/projects",
+      "/projects/p1",
       createMockAdapter({
         ...defaultHandlers,
         list_projects: () => [python(String.raw`D:\code\shop\.venv\Scripts`)],
       }),
     );
-    expect(await screen.findByRole("table")).toHaveTextContent("the project terminal uses it first");
+    expect(await screen.findByText(/the project terminal uses it first/)).toBeInTheDocument();
   });
 
   it("previews and applies a project PHP pin", async () => {
@@ -393,7 +398,7 @@ describe("projects", () => {
         startedAt: "2026-10-11T10:00:00.000Z",
       }),
     });
-    await renderApp("/projects", mock);
+    await renderApp("/projects/p1", mock);
     await userEvent.click(await screen.findByRole("button", { name: "Change PHP for Shop" }));
 
     const dialog = await screen.findByRole("dialog", { name: "PHP for Shop" });
@@ -416,7 +421,7 @@ describe("projects", () => {
 
   it("keeps the dialog open with the reason when verification fails", async () => {
     await renderApp(
-      "/projects",
+      "/projects/p1",
       createMockAdapter({
         ...defaultHandlers,
         list_projects: () => [project()],
@@ -448,8 +453,8 @@ describe("projects", () => {
       list_projects: () => [project()],
       remove_project: () => null,
     });
-    await renderApp("/projects", mock);
-    await userEvent.click(await screen.findByRole("button", { name: "Remove Shop from Devluma" }));
+    await renderApp("/projects/p1", mock);
+    await chooseFromMenu("More actions for Shop", "Remove from Devluma");
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveTextContent("The folder and every file in it stay exactly where they are.");
     expect(dialog).toHaveTextContent("D:\\code\\shop");
@@ -459,7 +464,7 @@ describe("projects", () => {
 
   it("opens a project terminal and says what's on PATH", async () => {
     await renderApp(
-      "/projects",
+      "/projects/p1",
       createMockAdapter({
         ...defaultHandlers,
         list_projects: () => [project()],

@@ -7,6 +7,7 @@ import {
   defaultHandlers,
   preferencesView,
   renderApp,
+  chooseFromMenu,
 } from "../../test/utils";
 
 const project = {
@@ -229,7 +230,7 @@ describe("sites", () => {
     );
     const table = await screen.findByRole("table");
     expect(table).toHaveTextContent("Project PHP changed — re-apply to switch");
-    await userEvent.click(within(table).getByRole("button", { name: "Check my-shop.test" }));
+    await chooseFromMenu("More actions for my-shop.test", "Check");
     expect(
       await within(table).findByText("http://my-shop.test/ answered with HTTP 200."),
     ).toBeInTheDocument();
@@ -242,7 +243,7 @@ describe("sites", () => {
       remove_site: () => ({ operationId: "op-2" }),
     });
     await renderApp("/sites", mock);
-    await userEvent.click(await screen.findByRole("button", { name: "Remove my-shop.test" }));
+    await chooseFromMenu("More actions for my-shop.test", "Remove");
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveTextContent("administrator approval");
     expect(dialog).toHaveTextContent("The project folder isn't touched");

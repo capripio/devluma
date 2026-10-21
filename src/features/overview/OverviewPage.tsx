@@ -87,7 +87,7 @@ export function OverviewPage() {
       <div className="flex min-w-0 flex-1 flex-col gap-5 px-7 py-6 wide:overflow-y-auto">
         <PageHeader
           title="Overview"
-          description="Each project runs as a line through the PHP, web server and domain its sites use."
+          description="Each coloured line is a project and the stack it runs on."
         />
         <Commands>
           <div role="group" aria-label="View" className="flex rounded border border-border-strong/70 p-0.5">
@@ -133,7 +133,7 @@ export function OverviewPage() {
               <EmptyState
                 icon={MapIcon}
                 title="No projects on the map yet"
-                description="Add a project folder and give it a site. Its PHP version, web server and .test domain then appear here as a line."
+                description="Add a project with a site and it appears here as a line."
                 action={
                   <Link
                     to="/projects"

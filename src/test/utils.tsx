@@ -230,3 +230,10 @@ export function preferencesView(
     ...overrides,
   };
 }
+
+/** Opens a row's or pane's "More" menu (by its accessible name) and picks an item. */
+export async function chooseFromMenu(menuLabel: string, item: string) {
+  const { default: userEvent } = await import("@testing-library/user-event");
+  await userEvent.click(await screen.findByRole("button", { name: menuLabel }));
+  await userEvent.click(await screen.findByRole("menuitem", { name: item }));
+}

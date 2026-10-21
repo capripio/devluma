@@ -13,23 +13,32 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
+/** Daily work first; tools you open now and then below it; Settings pinned to the foot. */
+export type NavGroup = "work" | "tools" | "settings";
+
 export interface NavItem {
   path: string;
   label: string;
   icon: LucideIcon;
+  group: NavGroup;
 }
 
-// Order and names from prd.md §8 / docs/design-brief.md §2.
+export const NAV_GROUP_LABELS: Record<Exclude<NavGroup, "settings">, string> = {
+  work: "Work",
+  tools: "Tools",
+};
+
+// Names from prd.md §8 / docs/design-brief.md §2, grouped by how often they're used.
 export const NAV_ITEMS: NavItem[] = [
-  { path: "/", label: "Overview", icon: LayoutDashboard },
-  { path: "/projects", label: "Projects", icon: FolderGit2 },
-  { path: "/services", label: "Services", icon: Server },
-  { path: "/scheduler", label: "Scheduler", icon: CalendarClock },
-  { path: "/runtimes", label: "Runtimes & Packages", icon: Package },
-  { path: "/sites", label: "Sites & Domains", icon: Globe },
-  { path: "/databases", label: "Databases", icon: Database },
-  { path: "/ssl", label: "SSL Certificates", icon: ShieldCheck },
-  { path: "/hosts", label: "Hosts File", icon: FileText },
-  { path: "/logs", label: "Logs & Diagnostics", icon: ScrollText },
-  { path: "/settings", label: "Settings", icon: Settings },
+  { path: "/", label: "Overview", icon: LayoutDashboard, group: "work" },
+  { path: "/projects", label: "Projects", icon: FolderGit2, group: "work" },
+  { path: "/sites", label: "Sites & Domains", icon: Globe, group: "work" },
+  { path: "/services", label: "Services", icon: Server, group: "work" },
+  { path: "/runtimes", label: "Runtimes & Packages", icon: Package, group: "tools" },
+  { path: "/databases", label: "Databases", icon: Database, group: "tools" },
+  { path: "/scheduler", label: "Scheduler", icon: CalendarClock, group: "tools" },
+  { path: "/ssl", label: "SSL Certificates", icon: ShieldCheck, group: "tools" },
+  { path: "/hosts", label: "Hosts File", icon: FileText, group: "tools" },
+  { path: "/logs", label: "Logs & Diagnostics", icon: ScrollText, group: "tools" },
+  { path: "/settings", label: "Settings", icon: Settings, group: "settings" },
 ];

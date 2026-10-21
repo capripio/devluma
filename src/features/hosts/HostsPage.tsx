@@ -23,7 +23,7 @@ export function HostsPage() {
     <>
       <PageHeader
         title="Hosts File"
-        description="The local domains Devluma maps to this computer. Only its own lines are shown or edited."
+        description="Local domains Devluma points at this computer. Only its own lines are touched."
       />
       {hosts.status === "pending" && (
         <p role="status" className="text-sm text-fg-muted">

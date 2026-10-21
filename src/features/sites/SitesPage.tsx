@@ -1,4 +1,4 @@
-import { Globe } from "lucide-react";
+import { Globe, RefreshCw, Share2, Stethoscope, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useOnOperationsSettled, useOperations } from "../../app/operations";
 import { Button } from "../../components/Button";
@@ -10,7 +10,8 @@ import { ipc } from "../../lib/ipc";
 import { toAppError } from "../../lib/ipc/errors";
 import { useAsync } from "../../lib/useAsync";
 import type { SiteView } from "../../types/dto";
-import { SharedAddress, ShareSite } from "../tunnels/ShareSite";
+import { MoreMenu } from "../../components/MoreMenu";
+import { SharedAddress, ShareConfirmDialog, StopSharingButton } from "../tunnels/ShareSite";
 import { SiteForm } from "./SiteForm";
 import { LoadingState } from "../../components/LoadingState";
 
@@ -30,7 +31,7 @@ export function SitesPage() {
     <>
       <PageHeader
         title="Sites & Domains"
-        description="Project folders served by Nginx at local domains."
+        description="Local domains for your projects."
         actions={addButton}
       />
       {form && <SiteForm existing={form.existing} onDone={() => setForm(null)} />}
@@ -42,7 +43,7 @@ export function SitesPage() {
             <EmptyState
               icon={Globe}
               title="No sites yet"
-              description="Serve a project at a local domain like my-app.test. You'll see the exact configuration and hosts-file change before anything is applied."
+              description="Serve a project at a domain like my-app.test. You see every change before it's applied."
               action={addButton}
             />
           )
@@ -59,6 +60,7 @@ function SitesTable({ sites, onEdit }: { sites: SiteView[]; onEdit: (s: SiteView
   const tunnelFor = (s: SiteView) =>
     tunnels.status === "success" ? tunnels.data.find((t) => t.siteId === s.id) : undefined;
   const [removing, setRemoving] = useState<SiteView | null>(null);
+  const [sharing, setSharing] = useState<SiteView | null>(null);
   const [notes, setNotes] = useState<Record<string, string>>({});
   const note = (id: string, text: string) => setNotes((n) => ({ ...n, [id]: text }));
 
@@ -126,20 +128,27 @@ function SitesTable({ sites, onEdit }: { sites: SiteView[]; onEdit: (s: SiteView
                   </td>
                   <td className="px-3 py-2">{s.hostsManaged ? "Managed" : "Not added"}</td>
                   <td className="px-3 py-2">
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex items-start gap-1">
                       <Button onClick={() => open(s)} aria-label={`Open ${s.domain}`}>
                         Open
                       </Button>
-                      <Button onClick={() => check(s)} aria-label={`Check ${s.domain}`}>
-                        Check
-                      </Button>
-                      <Button onClick={() => onEdit(s)} aria-label={`Re-apply ${s.domain}`}>
-                        Re-apply
-                      </Button>
-                      <ShareSite site={s} tunnel={tunnelFor(s)} onChanged={tunnels.refresh} />
-                      <Button onClick={() => setRemoving(s)} aria-label={`Remove ${s.domain}`}>
-                        Remove
-                      </Button>
+                      {tunnelFor(s)?.running && <StopSharingButton site={s} onChanged={tunnels.refresh} />}
+                      <MoreMenu
+                        label={`More actions for ${s.domain}`}
+                        items={[
+                          { label: "Check", icon: Stethoscope, onSelect: () => check(s) },
+                          { label: "Re-apply", icon: RefreshCw, onSelect: () => onEdit(s) },
+                          ...(tunnelFor(s)?.running
+                            ? []
+                            : [{ label: "Share with ngrok", icon: Share2, onSelect: () => setSharing(s) }]),
+                          {
+                            label: "Remove",
+                            icon: Trash2,
+                            destructive: true,
+                            onSelect: () => setRemoving(s),
+                          },
+                        ]}
+                      />
                     </div>
                   </td>
                 </tr>
@@ -148,6 +157,9 @@ function SitesTable({ sites, onEdit }: { sites: SiteView[]; onEdit: (s: SiteView
           </tbody>
         </table>
       </div>
+      {sharing && (
+        <ShareConfirmDialog site={sharing} onClose={() => setSharing(null)} onChanged={tunnels.refresh} />
+      )}
       {removing && (
         <ConfirmChangeDialog
           open

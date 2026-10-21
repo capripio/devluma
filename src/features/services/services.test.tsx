@@ -10,6 +10,7 @@ import {
   packageView,
   preferencesView,
   renderApp,
+  chooseFromMenu,
   versionView,
 } from "../../test/utils";
 
@@ -118,8 +119,11 @@ describe("services list", () => {
     act(() => mock.emit("service://state", { ...status, observedState: "running", healthStatus: "healthy" }));
     expect(webRow).toHaveTextContent("Running");
     expect(webRow).toHaveTextContent("Accepting connections");
+    // One visible action per row; Restart is under More.
     expect(within(webRow).getByRole("button", { name: "Stop web" })).toBeEnabled();
-    expect(within(webRow).getByRole("button", { name: "Restart web" })).toBeEnabled();
+    expect(within(webRow).queryByRole("button", { name: "Restart web" })).not.toBeInTheDocument();
+    await chooseFromMenu("More actions for web", "Restart");
+    expect(mock.calls.find((c) => c.command === "restart_service")?.args).toEqual({ serviceId: "s1" });
   });
 
   it("shows why the last start failed", async () => {
@@ -281,7 +285,7 @@ describe("services list", () => {
     const { container } = await renderApp("/services", mock);
     const group = await screen.findByRole("region", { name: "Mail" });
     expect(group).toHaveTextContent("UI 8025");
-    await userEvent.click(within(group).getByRole("button", { name: "Open the web interface of mail" }));
+    await chooseFromMenu("More actions for mail", "Open web interface");
     await waitFor(() => expect(mock.calls.some((c) => c.command === "open_service_ui")).toBe(true));
     expect(await axeViolations(container)).toEqual([]);
 

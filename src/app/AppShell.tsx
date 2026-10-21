@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useMatches } from "react-router";
 import logoUrl from "../assets/logo.png";
 import { CommandSlotContext } from "./commandBar";
-import { NAV_ITEMS, type NavItem } from "./navigation";
+import { NAV_GROUP_LABELS, NAV_ITEMS, type NavItem } from "./navigation";
 import { StatusBar } from "./StatusBar";
 
 /**
@@ -27,8 +27,7 @@ export function AppShell() {
   // Pane pages (map, list + detail, settings categories) fill the area; the rest flow padded.
   const paneLayout = useMatches().some((m) => (m.handle as RouteHandle | undefined)?.layout === "pane");
   // Settings is pinned to the bottom of the pane, Windows-style.
-  const sections = NAV_ITEMS.filter((item) => item.path !== "/settings");
-  const pinned = NAV_ITEMS.filter((item) => item.path === "/settings");
+  const pinned = NAV_ITEMS.filter((item) => item.group === "settings");
 
   return (
     <CommandSlotContext.Provider value={commandSlot}>
@@ -62,8 +61,24 @@ export function AppShell() {
             aria-label="Main"
             className="flex w-14 shrink-0 flex-col gap-0.5 border-r border-border bg-surface-sunken p-2 split:w-52 split:overflow-y-auto"
           >
-            {sections.map((item) => (
-              <NavItemLink key={item.path} item={item} />
+            {(Object.keys(NAV_GROUP_LABELS) as (keyof typeof NAV_GROUP_LABELS)[]).map((group, i) => (
+              <div
+                key={group}
+                role="group"
+                aria-labelledby={`nav-${group}`}
+                className={`flex flex-col gap-0.5 ${i > 0 ? "mt-2 border-t border-border pt-2 split:mt-3 split:border-0 split:pt-0" : ""}`}
+              >
+                {/* A heading in the wide pane; the icon rail shows a hairline instead. */}
+                <span
+                  id={`nav-${group}`}
+                  className="label-caps sr-only text-fg-muted split:not-sr-only split:px-2.5 split:pb-1"
+                >
+                  {NAV_GROUP_LABELS[group]}
+                </span>
+                {NAV_ITEMS.filter((item) => item.group === group).map((item) => (
+                  <NavItemLink key={item.path} item={item} />
+                ))}
+              </div>
             ))}
             <div className="mt-auto border-t border-border pt-2">
               {pinned.map((item) => (

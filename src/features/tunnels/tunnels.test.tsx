@@ -1,7 +1,13 @@
 import { screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { axeViolations, createMockAdapter, defaultHandlers, renderApp } from "../../test/utils";
+import {
+  axeViolations,
+  chooseFromMenu,
+  createMockAdapter,
+  defaultHandlers,
+  renderApp,
+} from "../../test/utils";
 
 const status = (overrides: Record<string, unknown> = {}) => ({
   path: null,
@@ -106,7 +112,7 @@ describe("sharing a site", () => {
       },
     });
     await renderApp("/sites", mock);
-    await userEvent.click(await screen.findByRole("button", { name: "Share my-shop.test with ngrok" }));
+    await chooseFromMenu("More actions for my-shop.test", "Share with ngrok");
     const dialog = screen.getByRole("dialog", { name: "Share my-shop.test on the internet?" });
     expect(dialog).toHaveTextContent("Anyone who has the address can open it");
     expect(dialog).toHaveTextContent("close Devluma");

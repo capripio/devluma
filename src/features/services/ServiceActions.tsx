@@ -1,5 +1,7 @@
 import { useState } from "react";
+import { ExternalLink, RotateCw, Square } from "lucide-react";
 import { Button } from "../../components/Button";
+import { MoreMenu, type MoreMenuItem } from "../../components/MoreMenu";
 import { ipc } from "../../lib/ipc";
 import { toAppError, type AppError } from "../../lib/ipc/errors";
 import type { ServiceView } from "../../types/dto";
@@ -17,7 +19,77 @@ const CALLS: Record<Action, (id: string) => Promise<unknown>> = {
  * Start/Stop/Restart for one service. Buttons follow the state the backend reports; while a
  * request is being accepted they're disabled to prevent duplicate submissions.
  */
-export function ServiceActions({ service }: { service: ServiceView }) {
+export function ServiceActions({ service, compact = false }: { service: ServiceView; compact?: boolean }) {
+  if (compact) return <CompactServiceActions service={service} />;
+  return <FullServiceActions service={service} />;
+}
+
+/**
+ * For table rows: the one action the state calls for (Start, Stop, or Restart when degraded)
+ * and the rest under More. Port warnings are shown in the row itself.
+ */
+function CompactServiceActions({ service }: { service: ServiceView }) {
+  const [pending, setPending] = useState<Action | null>(null);
+  const [error, setError] = useState<AppError | null>(null);
+  const s = service.observedState;
+  const name = service.instanceName;
+
+  const run = (action: Action) => {
+    setPending(action);
+    setError(null);
+    CALLS[action](service.id).then(
+      () => setPending(null),
+      (e: unknown) => {
+        setPending(null);
+        setError(toAppError(e));
+      },
+    );
+  };
+  const openUi = () => {
+    setError(null);
+    ipc.openServiceUi(service.id).catch((e: unknown) => setError(toAppError(e)));
+  };
+
+  const main: { action: Action; label: string; primary: boolean } | null =
+    s === "stopped" || s === "failed"
+      ? { action: "start", label: "Start", primary: true }
+      : s === "degraded"
+        ? { action: "restart", label: "Restart", primary: true }
+        : s === "running"
+          ? { action: "stop", label: "Stop", primary: false }
+          : null;
+  const more: MoreMenuItem[] = [
+    ...(s === "degraded" ? [{ label: "Stop", icon: Square, onSelect: () => run("stop") }] : []),
+    ...(s === "running" ? [{ label: "Restart", icon: RotateCw, onSelect: () => run("restart") }] : []),
+    ...(s === "running" && service.adminPort !== null
+      ? [{ label: "Open web interface", icon: ExternalLink, onSelect: openUi }]
+      : []),
+  ];
+
+  return (
+    <div className="flex flex-col gap-1">
+      <div className="flex items-center gap-1">
+        {main ? (
+          <Button
+            variant={main.primary ? "primary" : "secondary"}
+            pending={pending === main.action}
+            disabled={pending !== null}
+            onClick={() => run(main.action)}
+            aria-label={`${main.label} ${name}`}
+          >
+            {main.label}
+          </Button>
+        ) : (
+          <span className="text-xs text-fg-muted">Waiting for the service…</span>
+        )}
+        {more.length > 0 && <MoreMenu label={`More actions for ${name}`} items={more} />}
+      </div>
+      {error && <span className="text-xs text-danger">{error.message}</span>}
+    </div>
+  );
+}
+
+function FullServiceActions({ service }: { service: ServiceView }) {
   const [pending, setPending] = useState<Action | null>(null);
   const [error, setError] = useState<AppError | null>(null);
   const s = service.observedState;
