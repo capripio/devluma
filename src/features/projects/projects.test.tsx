@@ -199,6 +199,47 @@ describe("projects", () => {
     expect(await axeViolations(container)).toEqual([]);
   });
 
+  it("opens a project's website from its row", async () => {
+    const site = {
+      id: "s1",
+      projectId: "p1",
+      domain: "shop.test",
+      documentRoot: String.raw`D:\code\shop\public`,
+      webServerServiceId: "w1",
+      phpInstallationId: null,
+      httpPort: 80,
+      httpsPort: null,
+      sslEnabled: false,
+      configPath: String.raw`C:\Devluma\services\w1\sites\s1.conf`,
+      configHash: null,
+      status: "active",
+      hostsManaged: true,
+      createdAt: "2026-10-11T10:00:00.000Z",
+      updatedAt: "2026-10-11T10:00:00.000Z",
+      projectName: "Shop",
+      webServerName: "web",
+      webServerRunning: true,
+      url: "http://shop.test/",
+      httpsUrl: null,
+      phpVersion: null,
+      phpOutdated: false,
+      configPresent: true,
+    };
+    const mock = createMockAdapter({
+      ...defaultHandlers,
+      list_projects: () => [project(), project({ id: "p2", name: "Blog" })],
+      list_sites: () => [site],
+      open_site: () => "http://shop.test/",
+    });
+    await renderApp("/projects", mock);
+    const table = await screen.findByRole("table");
+    // Only the project with a site gets the button.
+    expect(await within(table).findAllByRole("button", { name: "Open shop.test" })).toHaveLength(1);
+    await userEvent.click(within(table).getByRole("button", { name: "Open shop.test" }));
+    expect(await within(table).findByText("Opened http://shop.test/ in your browser.")).toBeInTheDocument();
+    expect(mock.calls.find((c) => c.command === "open_site")?.args).toEqual({ siteId: "s1" });
+  });
+
   it("guides Python projects to a virtual environment", async () => {
     const python = (virtualEnvScripts: string | null) =>
       project({

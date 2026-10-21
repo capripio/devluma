@@ -9,13 +9,16 @@ import { PageHeader } from "../../components/PageHeader";
 import { ipc } from "../../lib/ipc";
 import { toAppError, type AppError } from "../../lib/ipc/errors";
 import { useAsync } from "../../lib/useAsync";
-import type { Project, ProjectView, SwitchRequest } from "../../types/dto";
+import type { Project, ProjectView, SiteView, SwitchRequest } from "../../types/dto";
+import { useOnOperationsSettled } from "../../app/operations";
 import { useStartupStatus } from "../../app/startup";
 import { RuntimeSwitchDialog } from "../runtimes/RuntimeSwitchDialog";
 import { SiteForm, slugify, suggestDomain } from "../sites/SiteForm";
 import { OpenTerminalButton } from "../terminal/OpenTerminalButton";
 import { terminalOpenedMessage } from "../terminal/terminal";
 import { LoadingState } from "../../components/LoadingState";
+
+const SITE_OPERATIONS = new Set(["apply_site", "remove_site"]);
 
 export function ProjectsPage() {
   const projects = useAsync(ipc.listProjects);
@@ -196,16 +199,26 @@ function runtimeLabel(rt: ProjectView["runtimes"][number]): string {
 function ProjectsTable({ projects, onChanged }: { projects: ProjectView[]; onChanged: () => void }) {
   const [changing, setChanging] = useState<{ project: ProjectView; packageId: string } | null>(null);
   const [removing, setRemoving] = useState<ProjectView | null>(null);
-  const [terminal, setTerminal] = useState<{ projectId: string; message?: string; error?: AppError } | null>(
-    null,
-  );
+  // Result of the last "Open terminal" / "Open website", shown under that project.
+  const [note, setNote] = useState<{ projectId: string; message?: string; error?: AppError } | null>(null);
+  const sites = useAsync(ipc.listSites);
+  useOnOperationsSettled((op) => SITE_OPERATIONS.has(op.operationType), sites.refresh);
+  const sitesOf = (p: ProjectView) =>
+    sites.status === "success" ? sites.data.filter((s) => s.projectId === p.id) : [];
   const runtimeColumns = projects[0]?.runtimes ?? [];
 
   const openTerminal = (p: ProjectView) => {
-    setTerminal({ projectId: p.id, message: "Opening…" });
+    setNote({ projectId: p.id, message: "Opening…" });
     ipc.openProjectTerminal(p.id).then(
-      (r) => setTerminal({ projectId: p.id, message: terminalOpenedMessage(r) }),
-      (e: unknown) => setTerminal({ projectId: p.id, error: toAppError(e) }),
+      (r) => setNote({ projectId: p.id, message: terminalOpenedMessage(r) }),
+      (e: unknown) => setNote({ projectId: p.id, error: toAppError(e) }),
+    );
+  };
+
+  const openWebsite = (p: ProjectView, s: SiteView) => {
+    ipc.openSite(s.id).then(
+      (url) => setNote({ projectId: p.id, message: `Opened ${url} in your browser.` }),
+      (e: unknown) => setNote({ projectId: p.id, error: toAppError(e) }),
     );
   };
 
@@ -238,12 +251,12 @@ function ProjectsTable({ projects, onChanged }: { projects: ProjectView[]; onCha
                     <CopyButton value={p.rootPath} label={`folder of ${p.name}`} />
                   </div>
                   {p.detection.kind === "python" && <VenvHint project={p} />}
-                  {terminal?.projectId === p.id && (
+                  {note?.projectId === p.id && (
                     <div aria-live="polite" className="mt-1 text-xs">
-                      {terminal.error ? (
-                        <span className="text-danger">{terminal.error.message}</span>
+                      {note.error ? (
+                        <span className="text-danger">{note.error.message}</span>
                       ) : (
-                        <span className="text-fg-muted">{terminal.message}</span>
+                        <span className="text-fg-muted">{note.message}</span>
                       )}
                     </div>
                   )}
@@ -262,6 +275,11 @@ function ProjectsTable({ projects, onChanged }: { projects: ProjectView[]; onCha
                 ))}
                 <td className="px-3 py-2">
                   <div className="flex flex-wrap gap-2">
+                    {sitesOf(p).map((s, _, all) => (
+                      <Button key={s.id} onClick={() => openWebsite(p, s)} aria-label={`Open ${s.domain}`}>
+                        {all.length > 1 ? `Open ${s.domain}` : "Open website"}
+                      </Button>
+                    ))}
                     <Button onClick={() => openTerminal(p)} aria-label={`Open terminal for ${p.name}`}>
                       Open terminal
                     </Button>

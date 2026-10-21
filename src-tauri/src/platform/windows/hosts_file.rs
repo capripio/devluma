@@ -95,6 +95,14 @@ fn replace_file(target: &Path, replacement: &Path) -> std::io::Result<()> {
     .map_err(|e| std::io::Error::other(e.message()))
 }
 
+/// Sets or clears the file's read-only attribute (nothing else about its permissions).
+fn set_read_only(path: &Path, read_only: bool) -> std::io::Result<()> {
+    let mut p = std::fs::metadata(path)?.permissions();
+    #[allow(clippy::permissions_set_readonly_false)] // Windows: only the read-only attribute.
+    p.set_readonly(read_only);
+    std::fs::set_permissions(path, p)
+}
+
 /// Applies `req` to the hosts file at `hosts_path`, writing a backup into `backups_dir`.
 pub fn apply(hosts_path: &Path, backups_dir: &Path, req: &HostsRequest) -> HostsResult {
     if req.verb != VERB_APPLY {
@@ -163,14 +171,30 @@ pub fn apply(hosts_path: &Path, backups_dir: &Path, req: &HostsRequest) -> Hosts
         );
     }
 
-    // Atomic replace from a temp file next to the target.
+    // Atomic replace from a temp file next to the target. Some tools mark the hosts file
+    // read-only, which blocks the replace even for administrators: lift the attribute for
+    // this approved write only and put it back afterwards.
     let tmp = hosts_path.with_file_name("hosts.devluma-tmp");
     let _ = std::fs::remove_file(&tmp);
-    let written = std::fs::write(&tmp, new_text.as_bytes()).and_then(|_| {
-        replace_file(hosts_path, &tmp).or_else(|_| std::fs::rename(&tmp, hosts_path))
-    });
+    let read_only = std::fs::metadata(hosts_path).is_ok_and(|m| m.permissions().readonly());
+    let written = std::fs::write(&tmp, new_text.as_bytes())
+        .and_then(|_| {
+            if read_only {
+                set_read_only(hosts_path, false)?;
+            }
+            replace_file(hosts_path, &tmp).or_else(|_| std::fs::rename(&tmp, hosts_path))
+        })
+        .and_then(|_| {
+            if read_only {
+                set_read_only(hosts_path, true)?;
+            }
+            Ok(())
+        });
     if let Err(e) = written {
         let _ = std::fs::remove_file(&tmp);
+        if read_only {
+            let _ = set_read_only(hosts_path, true);
+        }
         return HostsResult::fail(
             "PERMISSION_DENIED",
             format!("Could not write the hosts file; it was not changed: {e}"),
@@ -334,6 +358,26 @@ mod tests {
         assert!(r.message.contains("changed after you reviewed"));
         assert_eq!(std::fs::read_to_string(&hosts).unwrap(), ORIGINAL);
         assert!(!backups.exists());
+    }
+
+    #[test]
+    fn writes_a_read_only_hosts_file_and_keeps_it_read_only() {
+        // Some tools mark the hosts file read-only; replacing it then fails even as admin.
+        let (_d, hosts, backups) = setup();
+        set_read_only(&hosts, true).unwrap();
+        let r = apply(
+            &hosts,
+            &backups,
+            &req(&["shop.test"], &sha256_hex(ORIGINAL.as_bytes())),
+        );
+        assert!(r.ok && r.changed, "{r:?}");
+        assert!(
+            std::fs::read_to_string(&hosts)
+                .unwrap()
+                .contains("shop.test")
+        );
+        assert!(std::fs::metadata(&hosts).unwrap().permissions().readonly());
+        set_read_only(&hosts, false).unwrap();
     }
 
     #[test]
