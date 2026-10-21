@@ -1275,7 +1275,7 @@ mod live {
         );
 
         // A Laravel-shaped project whose front controller prints the PHP version.
-        let project_dir = dir.path().join("shop");
+        let project_dir = paths.www.join("shop");
         std::fs::create_dir_all(project_dir.join("public")).unwrap();
         std::fs::write(project_dir.join("artisan"), "").unwrap();
         std::fs::write(
@@ -1283,9 +1283,7 @@ mod live {
             "<?php echo 'hello from PHP ', PHP_VERSION;",
         )
         .unwrap();
-        let project =
-            crate::services::projects::create(&db, &paths, "Shop", &project_dir.to_string_lossy())
-                .unwrap();
+        let project = crate::services::projects::create(&db, &paths, "Shop", "shop").unwrap();
         assert_eq!(project.project_type.as_deref(), Some("laravel"));
 
         let (hosts_svc, hosts_file) = crate::services::hosts::test_support::service(

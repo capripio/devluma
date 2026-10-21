@@ -70,14 +70,15 @@ pub async fn list_projects(state: State<'_, AppState>) -> IpcResult<Vec<ProjectV
     .await
 }
 
+/// Adds `www\<folder>` as a project, creating the folder when it doesn't exist yet.
 #[tauri::command]
 pub async fn create_project(
     state: State<'_, AppState>,
     name: String,
-    root_path: String,
+    folder: String,
 ) -> IpcResult<Project> {
     let (db, paths) = (state.db()?, state.paths.clone());
-    blocking(move || crate::services::projects::create(&db, &paths, &name, &root_path)).await
+    blocking(move || crate::services::projects::create(&db, &paths, &name, &folder)).await
 }
 
 /// Removes the project from Devluma (metadata, pins and links). The folder is not touched.

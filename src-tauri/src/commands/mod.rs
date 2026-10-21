@@ -9,6 +9,7 @@ pub mod operations;
 pub mod packages;
 pub mod projects;
 pub mod runtimes;
+pub mod scheduler;
 pub mod services;
 pub mod settings;
 pub mod setup;

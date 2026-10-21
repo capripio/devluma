@@ -1,4 +1,5 @@
 import {
+  CalendarClock,
   Database,
   FileText,
   FolderGit2,
@@ -23,6 +24,7 @@ export const NAV_ITEMS: NavItem[] = [
   { path: "/", label: "Overview", icon: LayoutDashboard },
   { path: "/projects", label: "Projects", icon: FolderGit2 },
   { path: "/services", label: "Services", icon: Server },
+  { path: "/scheduler", label: "Scheduler", icon: CalendarClock },
   { path: "/runtimes", label: "Runtimes & Packages", icon: Package },
   { path: "/sites", label: "Sites & Domains", icon: Globe },
   { path: "/databases", label: "Databases", icon: Database },

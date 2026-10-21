@@ -7,6 +7,7 @@ import {
   createMockAdapter,
   defaultHandlers,
   packageView,
+  preferencesView,
   renderApp,
   versionView,
 } from "../../test/utils";
@@ -91,7 +92,7 @@ describe("projects", () => {
     expect(screen.getAllByRole("button", { name: "Add project" }).length).toBeGreaterThan(0);
   });
 
-  it("adds a project and shows backend validation errors inline", async () => {
+  it("adds a project in www and shows backend validation errors inline", async () => {
     let attempts = 0;
     const mock = createMockAdapter({
       ...defaultHandlers,
@@ -100,7 +101,7 @@ describe("projects", () => {
         if (attempts === 1) {
           throw {
             code: "VALIDATION_ERROR",
-            message: "That folder doesn't exist or can't be opened.",
+            message: "Enter a folder inside www, for example my-app.",
             recoverable: false,
           };
         }
@@ -110,17 +111,81 @@ describe("projects", () => {
     await renderApp("/projects", mock);
     await userEvent.click((await screen.findAllByRole("button", { name: "Add project" }))[0]!);
     const form = screen.getByRole("form", { name: "Add project" });
-    await userEvent.type(within(form).getByLabelText("Name"), "Shop");
-    await userEvent.type(within(form).getByLabelText("Folder"), "D:\\nope");
+    await userEvent.type(within(form).getByLabelText("Name"), "My Shop");
+    // The folder follows the name and shows where it ends up.
+    expect(within(form).getByLabelText("Folder")).toHaveValue("my-shop");
+    expect(within(form).getByText(/Devluma\\www\\my-shop/)).toBeInTheDocument();
+    await userEvent.click(within(form).getByLabelText("Also create a site at"));
     await userEvent.click(within(form).getByRole("button", { name: "Add project" }));
-    expect(await within(form).findByRole("alert")).toHaveTextContent("doesn't exist");
+    expect(await within(form).findByRole("alert")).toHaveTextContent("inside www");
 
+    await userEvent.clear(within(form).getByLabelText("Folder"));
+    await userEvent.type(within(form).getByLabelText("Folder"), "clients\\shop");
     await userEvent.click(within(form).getByRole("button", { name: "Add project" }));
     await waitFor(() => expect(screen.queryByRole("form", { name: "Add project" })).not.toBeInTheDocument());
     expect(mock.calls.filter((c) => c.command === "create_project").at(-1)?.args).toEqual({
-      name: "Shop",
-      rootPath: "D:\\nope",
+      name: "My Shop",
+      folder: "clients\\shop",
     });
+    expect(screen.queryByRole("form", { name: "Add site" })).not.toBeInTheDocument();
+  });
+
+  it("offers the site for a new project with its domain filled in", async () => {
+    const added = project({ id: "p2", name: "Blog", rootPath: "C:\\Devluma\\www\\blog" });
+    let projects: unknown[] = [];
+    const mock = createMockAdapter({
+      ...defaultHandlers,
+      get_preferences: () => preferencesView({ domainSuffix: "local" }),
+      list_projects: () => projects,
+      list_services: () => [
+        {
+          id: "w1",
+          packageInstallationId: "i-ng",
+          instanceName: "web",
+          serviceType: "web_server",
+          lifecycleAdapter: "nginx",
+          desiredState: "running",
+          observedState: "running",
+          port: 80,
+          bindAddress: "127.0.0.1",
+          configPath: null,
+          dataPath: null,
+          pid: 1,
+          processStartedAt: null,
+          healthStatus: "healthy",
+          lastExitCode: null,
+          lastErrorCode: null,
+          jobName: null,
+          adminPort: null,
+          updatedAt: "2026-10-12T10:00:00.000Z",
+          role: "web_server",
+          packageId: "nginx",
+          packageName: "Nginx",
+          version: "1.30.5",
+        },
+      ],
+      create_project: () => {
+        projects = [added];
+        return { ...added, runtimes: undefined, detection: undefined };
+      },
+    });
+    const { container } = await renderApp("/projects", mock);
+    await userEvent.click((await screen.findAllByRole("button", { name: "Add project" }))[0]!);
+    const form = screen.getByRole("form", { name: "Add project" });
+    await userEvent.type(within(form).getByLabelText("Name"), "Blog");
+    await waitFor(() => expect(within(form).getByLabelText("Domain")).toHaveValue("blog.local"));
+    await userEvent.click(within(form).getByRole("button", { name: "Add project" }));
+
+    const site = await screen.findByRole("form", { name: "Add site" });
+    expect(screen.getByText(/Blog was added/)).toBeInTheDocument();
+    expect(within(site).getByLabelText("Domain")).toHaveValue("blog.local");
+    expect(within(site).getByLabelText("Project")).toHaveValue("p2");
+    // Nothing is applied until the user previews and applies.
+    expect(mock.calls.some((c) => c.command === "apply_site" || c.command === "preview_site")).toBe(false);
+    expect(await axeViolations(container)).toEqual([]);
+
+    await userEvent.click(within(site).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("form", { name: "Add site" })).not.toBeInTheDocument();
   });
 
   it("lists projects with their effective PHP and passes a11y checks", async () => {

@@ -52,6 +52,7 @@ export const readyStartup = {
   dataDir: String.raw`C:\Users\dev\AppData\Local\Devluma`,
   databasePath: String.raw`C:\Users\dev\AppData\Local\Devluma\app.db`,
   backupsDir: String.raw`C:\Users\dev\AppData\Local\Devluma\backups`,
+  projectsDir: String.raw`C:\Users\dev\AppData\Local\Devluma\www`,
   recovery: { operationsNeedingRecovery: 0, installationsMarkedBroken: 0, servicesMarkedUnknown: 0 },
 };
 
@@ -68,6 +69,7 @@ export const defaultHandlers: Record<string, (args?: Record<string, unknown>) =>
   list_packages: () => catalogView([]),
   list_projects: () => [],
   list_services: () => [],
+  list_scheduled_jobs: () => [],
   list_sites: () => [],
   list_certificates: () => [],
   list_tunnels: () => [],

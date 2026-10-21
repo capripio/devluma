@@ -47,6 +47,13 @@ import {
   type OperationProgress,
   type RestoreRequest,
 } from "../../types/dto";
+import {
+  jobEventSchema,
+  jobPreviewSchema,
+  jobRunSchema,
+  jobViewSchema,
+  type JobRequest,
+} from "../../types/dto";
 import { getIpcAdapter, type Unlisten } from "./adapter";
 import { AppError, toAppError } from "./errors";
 
@@ -100,8 +107,8 @@ export const ipc = {
   createPhpIni: (installationId: string, template: "development" | "production") =>
     call("create_php_ini", { installationId, template }, phpDetailsSchema),
   listProjects: () => call("list_projects", undefined, z.array(projectViewSchema)),
-  createProject: (name: string, rootPath: string) =>
-    call("create_project", { name, rootPath }, projectSchema),
+  /** `folder` is relative to the projects folder (`www`); it is created when missing. */
+  createProject: (name: string, folder: string) => call("create_project", { name, folder }, projectSchema),
   removeProject: (projectId: string) => call("remove_project", { projectId }, z.null()),
   openProjectTerminal: (projectId: string) =>
     call("open_project_terminal", { projectId }, terminalOpenedSchema),
@@ -179,6 +186,18 @@ export const ipc = {
   setLaunchAtLogin: (enabled: boolean) => call("set_launch_at_login", { enabled }, launchAtLoginSchema),
   getStorageUsage: () => call("get_storage_usage", undefined, storageUsageSchema),
   openStorageFolder: (key: string) => call("open_storage_folder", { key }, z.null()),
+  // Scheduler (ADR 0017)
+  listScheduledJobs: () => call("list_scheduled_jobs", undefined, z.array(jobViewSchema)),
+  previewScheduledJob: (request: JobRequest) => call("preview_scheduled_job", { request }, jobPreviewSchema),
+  saveScheduledJob: (request: JobRequest) => call("save_scheduled_job", { request }, jobViewSchema),
+  setScheduledJobEnabled: (jobId: string, enabled: boolean) =>
+    call("set_scheduled_job_enabled", { jobId, enabled }, jobViewSchema),
+  runScheduledJobNow: (jobId: string) => call("run_scheduled_job_now", { jobId }, jobRunSchema),
+  stopScheduledJobRun: (jobId: string) => call("stop_scheduled_job_run", { jobId }, z.null()),
+  deleteScheduledJob: (jobId: string) => call("delete_scheduled_job", { jobId }, z.null()),
+  listScheduledJobRuns: (jobId: string) => call("list_scheduled_job_runs", { jobId }, z.array(jobRunSchema)),
+  getScheduledJobRunLog: (jobId: string, runId: string) =>
+    call("get_scheduled_job_run_log", { jobId, runId }, z.string()),
 };
 
 export const events = {
@@ -186,6 +205,8 @@ export const events = {
     subscribe("operation://progress", operationProgressSchema, handler),
   onServiceState: (handler: (status: ServiceStatus) => void) =>
     subscribe("service://state", serviceStatusSchema, handler),
+  onScheduledJob: (handler: (event: { jobId: string }) => void) =>
+    subscribe("scheduler://job", jobEventSchema, handler),
 };
 
 export { AppError } from "./errors";

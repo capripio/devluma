@@ -1246,16 +1246,10 @@ mod tests {
             .unwrap();
         }
 
-        let project_dir = dir.path().join("api");
-        std::fs::create_dir(&project_dir).unwrap();
+        let project_dir = paths.www.join("api");
+        std::fs::create_dir_all(&project_dir).unwrap();
         std::fs::write(project_dir.join("pyproject.toml"), "").unwrap();
-        let project = crate::services::projects::create(
-            &ctx.db,
-            &paths,
-            "API",
-            &project_dir.to_string_lossy(),
-        )
-        .unwrap();
+        let project = crate::services::projects::create(&ctx.db, &paths, "API", "api").unwrap();
         let prefix = runtime::project_path_prefix(&ctx.db, &ctx.catalog, &project.id).unwrap();
         let tools = py_dir.join("tools");
         let expected = [

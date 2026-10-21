@@ -9,8 +9,10 @@ import { PageHeader } from "../../components/PageHeader";
 import { ipc } from "../../lib/ipc";
 import { toAppError, type AppError } from "../../lib/ipc/errors";
 import { useAsync } from "../../lib/useAsync";
-import type { ProjectView, SwitchRequest } from "../../types/dto";
+import type { Project, ProjectView, SwitchRequest } from "../../types/dto";
+import { useStartupStatus } from "../../app/startup";
 import { RuntimeSwitchDialog } from "../runtimes/RuntimeSwitchDialog";
+import { SiteForm, slugify, suggestDomain } from "../sites/SiteForm";
 import { OpenTerminalButton } from "../terminal/OpenTerminalButton";
 import { terminalOpenedMessage } from "../terminal/terminal";
 import { LoadingState } from "../../components/LoadingState";
@@ -18,6 +20,8 @@ import { LoadingState } from "../../components/LoadingState";
 export function ProjectsPage() {
   const projects = useAsync(ipc.listProjects);
   const [adding, setAdding] = useState(false);
+  // Set after adding a project with "Also create a site": the usual preview → apply flow.
+  const [siteFor, setSiteFor] = useState<{ project: Project; domain: string } | null>(null);
 
   const addButton = (
     <Button variant="primary" onClick={() => setAdding(true)} disabled={adding}>
@@ -39,11 +43,24 @@ export function ProjectsPage() {
       {adding && (
         <AddProjectForm
           onCancel={() => setAdding(false)}
-          onAdded={() => {
+          onAdded={(project, domain) => {
             setAdding(false);
             projects.refresh();
+            if (domain) setSiteFor({ project, domain });
           }}
         />
+      )}
+      {siteFor && (
+        <section aria-label={`Site for ${siteFor.project.name}`} className="flex flex-col gap-2 text-sm">
+          <p className="text-fg-muted">
+            {siteFor.project.name} was added. Review its site below; nothing changes until you apply.
+          </p>
+          <SiteForm
+            initialProjectId={siteFor.project.id}
+            initialDomain={siteFor.domain}
+            onDone={() => setSiteFor(null)}
+          />
+        </section>
       )}
       {projects.status === "pending" && <LoadingState label="Loading projects…" shape="table" columns={5} />}
       {projects.status === "error" && <ErrorPanel error={projects.error} onRetry={projects.reload} />}
@@ -53,7 +70,7 @@ export function ProjectsPage() {
             <EmptyState
               icon={FolderGit2}
               title="No projects yet"
-              description="Add a project folder to choose which PHP version it uses. Devluma never writes into your project folder, and removing a project never deletes it."
+              description="Projects live in Devluma's www folder. Add one to choose which PHP version it uses and give it a local domain. Devluma never writes into your project folder, and removing a project never deletes it."
               action={addButton}
             />
           )
@@ -64,11 +81,33 @@ export function ProjectsPage() {
   );
 }
 
-function AddProjectForm({ onCancel, onAdded }: { onCancel: () => void; onAdded: () => void }) {
+function AddProjectForm({
+  onCancel,
+  onAdded,
+}: {
+  onCancel: () => void;
+  /** `domain` is set when the user also wants a site for the project. */
+  onAdded: (project: Project, domain: string | null) => void;
+}) {
+  const projectsDir = useStartupStatus()?.projectsDir ?? "www";
+  // The domain suffix from Settings; ".test" if preferences can't be read.
+  const suffix = useAsync(() =>
+    ipc.getPreferences().then(
+      (p) => p.preferences.domainSuffix,
+      () => "test",
+    ),
+  );
   const [name, setName] = useState("");
-  const [rootPath, setRootPath] = useState("");
+  // Folder and domain follow the name until the user edits them.
+  const [folder, setFolder] = useState<string | null>(null);
+  const [domain, setDomain] = useState<string | null>(null);
+  const [createSite, setCreateSite] = useState(true);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<AppError | null>(null);
+
+  const folderValue = folder ?? slugify(name);
+  const domainValue =
+    domain ?? (name.trim() ? suggestDomain(name, suffix.status === "success" ? suffix.data : "test") : "");
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -76,8 +115,8 @@ function AddProjectForm({ onCancel, onAdded }: { onCancel: () => void; onAdded: 
     setPending(true);
     setError(null);
     try {
-      await ipc.createProject(name, rootPath);
-      onAdded();
+      const project = await ipc.createProject(name, folderValue);
+      onAdded(project, createSite ? domainValue : null);
     } catch (err) {
       setError(toAppError(err));
     } finally {
@@ -102,14 +141,37 @@ function AddProjectForm({ onCancel, onAdded }: { onCancel: () => void; onAdded: 
             className={`${input} w-56`}
           />
         </label>
-        <label className="flex min-w-72 flex-1 flex-col gap-1">
-          <span className="text-fg-muted">Folder</span>
+        <div className="flex min-w-72 flex-1 flex-col gap-1">
+          <label className="flex flex-col gap-1">
+            <span className="text-fg-muted">Folder</span>
+            <input
+              required
+              value={folderValue}
+              onChange={(e) => setFolder(e.target.value)}
+              placeholder="my-app"
+              aria-describedby="project-folder-path"
+              className={`${input} font-mono`}
+            />
+          </label>
+          <span id="project-folder-path" className="font-mono text-xs break-all text-fg-muted">
+            {projectsDir}\{folderValue || "…"} — created if it doesn&apos;t exist
+          </span>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-end gap-4">
+        <label className="flex items-center gap-2 py-1.5">
+          <input type="checkbox" checked={createSite} onChange={(e) => setCreateSite(e.target.checked)} />
+          Also create a site at
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="sr-only">Domain</span>
           <input
-            required
-            value={rootPath}
-            onChange={(e) => setRootPath(e.target.value)}
-            placeholder="D:\code\my-app"
-            className={`${input} font-mono`}
+            required={createSite}
+            disabled={!createSite}
+            value={domainValue}
+            onChange={(e) => setDomain(e.target.value)}
+            placeholder="my-app.test"
+            className={`${input} w-56 font-mono disabled:opacity-60`}
           />
         </label>
       </div>

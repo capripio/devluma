@@ -654,11 +654,7 @@ mod tests {
         let paths = DataPaths::under(&dir.path().join("Devluma"));
         paths.create_all().unwrap();
         let db = Arc::new(db());
-        let project_dir = dir.path().join("shop");
-        std::fs::create_dir(&project_dir).unwrap();
-        let project =
-            crate::services::projects::create(&db, &paths, "Shop", &project_dir.to_string_lossy())
-                .unwrap();
+        let project = crate::services::projects::create(&db, &paths, "Shop", "shop").unwrap();
         let site_id =
             crate::persistence::sites::test_support::insert(&db, &project.id, "shop.test", 8080);
         // The service checks the file is named ngrok.exe; a copy of the test binary is.

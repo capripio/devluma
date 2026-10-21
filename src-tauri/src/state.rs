@@ -18,6 +18,7 @@ use crate::services::hosts::HostsService;
 use crate::services::install::{InstallContext, InstallManager, ProcessProbe};
 use crate::services::journal::ProgressSink;
 use crate::services::recovery::{self, RecoveryReport};
+use crate::services::scheduler::{Scheduler, SchedulerSink};
 use crate::services::sites::SiteService;
 use crate::services::supervisor::{StateSink, Supervisor};
 use crate::services::tunnels::TunnelService;
@@ -38,6 +39,8 @@ pub struct DataPaths {
     pub services: PathBuf,
     /// Default location for database data. User-owned: never deleted automatically.
     pub data: PathBuf,
+    /// Project folders (`www\<folder>`). User-owned: never deleted automatically.
+    pub www: PathBuf,
 }
 
 impl DataPaths {
@@ -51,6 +54,7 @@ impl DataPaths {
             staging: root.join("staging"),
             services: root.join("services"),
             data: root.join("data"),
+            www: root.join("www"),
         }
     }
 
@@ -62,6 +66,7 @@ impl DataPaths {
             &self.staging,
             &self.services,
             &self.data,
+            &self.www,
         ] {
             std::fs::create_dir_all(dir)?;
         }
@@ -99,6 +104,8 @@ pub struct StartupStatus {
     pub data_dir: String,
     pub database_path: String,
     pub backups_dir: String,
+    /// Where new projects are created (`<root>\www`).
+    pub projects_dir: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<IpcError>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -119,6 +126,7 @@ pub struct AppState {
     pub sites: Option<Arc<SiteService>>,
     pub certificates: Option<Arc<CertificateService>>,
     pub tunnels: Option<Arc<TunnelService>>,
+    pub scheduler: Option<Arc<Scheduler>>,
     pub databases: Option<Arc<DatabaseService>>,
     pub diagnostics: Option<Arc<Diagnostics>>,
     pub updates: Option<Arc<UpdateService>>,
@@ -160,6 +168,11 @@ impl AppState {
     pub fn tunnels(&self) -> Result<Arc<TunnelService>, IpcError> {
         self.db()?;
         self.tunnels.clone().ok_or_else(IpcError::internal)
+    }
+
+    pub fn scheduler(&self) -> Result<Arc<Scheduler>, IpcError> {
+        self.db()?;
+        self.scheduler.clone().ok_or_else(IpcError::internal)
     }
 
     pub fn sites(&self) -> Result<Arc<SiteService>, IpcError> {
@@ -212,6 +225,7 @@ pub fn initialize(
     data_dir: &Path,
     sink: Arc<dyn ProgressSink>,
     states: Arc<dyn StateSink>,
+    jobs: Arc<dyn SchedulerSink>,
 ) -> AppState {
     let paths = DataPaths::under(data_dir);
     let mut startup = StartupStatus {
@@ -219,6 +233,7 @@ pub fn initialize(
         data_dir: display(&paths.root),
         database_path: display(&paths.db_file),
         backups_dir: display(&paths.backups),
+        projects_dir: display(&paths.www),
         error: None,
         recovery: None,
         migration_backup_path: None,
@@ -273,6 +288,14 @@ pub fn initialize(
         let tunnels = db
             .as_ref()
             .map(|db| TunnelService::new(Arc::clone(db), paths.clone(), Arc::clone(&sink)));
+        let scheduler = db.as_ref().map(|db| {
+            Scheduler::new(
+                Arc::clone(db),
+                Arc::clone(&catalog),
+                paths.clone(),
+                Arc::clone(&jobs),
+            )
+        });
         let databases = match (&db, &supervisor) {
             (Some(db), Some(sup)) => Some(DatabaseService::new(
                 Arc::clone(db),
@@ -310,6 +333,7 @@ pub fn initialize(
             sites,
             certificates,
             tunnels,
+            scheduler,
             databases,
             diagnostics,
             updates,
@@ -367,8 +391,18 @@ mod tests {
         fn emit_state(&self, _: &crate::services::supervisor::ServiceStatus) {}
     }
 
+    struct NoJobs;
+    impl SchedulerSink for NoJobs {
+        fn job_changed(&self, _: &str) {}
+    }
+
     fn initialize(dir: &Path) -> AppState {
-        super::initialize(dir, Arc::new(RecordingSink::default()), Arc::new(NoStates))
+        super::initialize(
+            dir,
+            Arc::new(RecordingSink::default()),
+            Arc::new(NoStates),
+            Arc::new(NoJobs),
+        )
     }
 
     #[test]

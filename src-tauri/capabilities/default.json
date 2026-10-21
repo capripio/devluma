@@ -81,6 +81,15 @@
     "allow-set-launch-at-login",
     "allow-open-terminal",
     "allow-get-storage-usage",
-    "allow-open-storage-folder"
+    "allow-open-storage-folder",
+    "allow-list-scheduled-jobs",
+    "allow-preview-scheduled-job",
+    "allow-save-scheduled-job",
+    "allow-set-scheduled-job-enabled",
+    "allow-run-scheduled-job-now",
+    "allow-stop-scheduled-job-run",
+    "allow-delete-scheduled-job",
+    "allow-list-scheduled-job-runs",
+    "allow-get-scheduled-job-run-log"
   ]
 }

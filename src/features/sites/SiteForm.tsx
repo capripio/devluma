@@ -12,24 +12,31 @@ import { LoadingState } from "../../components/LoadingState";
 
 const PHP_KINDS = new Set(["laravel", "symfony", "wordpress", "php"]);
 
-/** ("My Shop", "test") → "my-shop.test" (mirrors `domain_name::suggest`). */
-export function suggestDomain(name: string, suffix = "test"): string {
-  const slug = name
+/** "My Shop" → "my-shop". */
+export function slugify(name: string): string {
+  return name
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  return `${slug || "site"}.${suffix}`;
+}
+
+/** ("My Shop", "test") → "my-shop.test" (mirrors `domain_name::suggest`). */
+export function suggestDomain(name: string, suffix = "test"): string {
+  return `${slugify(name) || "site"}.${suffix}`;
 }
 
 interface SiteFormProps {
   /** Present when re-applying an existing site. */
   existing?: SiteView;
+  /** New site: start with this project (and domain) selected, e.g. right after adding it. */
+  initialProjectId?: string;
+  initialDomain?: string;
   onDone: () => void;
 }
 
 /** Add or re-apply a site: fill in → preview the exact changes → apply. */
-export function SiteForm({ existing, onDone }: SiteFormProps) {
+export function SiteForm({ existing, initialProjectId, initialDomain, onDone }: SiteFormProps) {
   const data = useAsync(() =>
     Promise.all([
       ipc.listProjects(),
@@ -73,7 +80,15 @@ export function SiteForm({ existing, onDone }: SiteFormProps) {
     );
   }
   return (
-    <Form projects={projects} webServers={webServers} suffix={suffix} existing={existing} onDone={onDone} />
+    <Form
+      projects={projects}
+      webServers={webServers}
+      suffix={suffix}
+      existing={existing}
+      initialProjectId={initialProjectId}
+      initialDomain={initialDomain}
+      onDone={onDone}
+    />
   );
 }
 
@@ -82,18 +97,28 @@ function Form({
   webServers,
   suffix,
   existing,
+  initialProjectId,
+  initialDomain,
   onDone,
 }: {
   projects: ProjectView[];
   webServers: { id: string; instanceName: string; port: number | null }[];
   suffix: string;
   existing?: SiteView;
+  initialProjectId?: string;
+  initialDomain?: string;
   onDone: () => void;
 }) {
-  const initialProject = projects.find((p) => p.id === existing?.projectId) ?? projects[0]!;
+  const initialProject =
+    projects.find((p) => p.id === (existing?.projectId ?? initialProjectId)) ?? projects[0]!;
   const [projectId, setProjectId] = useState(initialProject.id);
   const project = projects.find((p) => p.id === projectId) ?? initialProject;
-  const [domain, setDomain] = useState(existing?.domain ?? suggestDomain(initialProject.name, suffix));
+  const [domain, setDomain] = useState(
+    existing?.domain ??
+      (initialProject.id === initialProjectId && initialDomain
+        ? initialDomain
+        : suggestDomain(initialProject.name, suffix)),
+  );
   const [webId, setWebId] = useState(existing?.webServerServiceId ?? webServers[0]!.id);
   const [usePhp, setUsePhp] = useState(
     existing ? existing.phpInstallationId !== null : PHP_KINDS.has(initialProject.detection.kind ?? ""),

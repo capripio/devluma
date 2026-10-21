@@ -190,6 +190,8 @@ fn rewrite_columns(c: &rusqlite::Connection, maps: &[(String, String)]) -> DbRes
         ("certificates", "id", "private_key_path"),
         ("database_backups", "id", "path"),
         ("hosts_backups", "id", "backup_path"),
+        // A scheduled command may name an .exe inside Devluma's folder (ADR 0017).
+        ("scheduled_jobs", "id", "program"),
     ];
     let mut n = 0;
     for (table, key, col) in COLUMNS {
@@ -337,8 +339,9 @@ pub struct FolderUsage {
 }
 
 /// Devluma's folders under the storage root, by key.
-pub fn folders(paths: &crate::state::DataPaths) -> [(&'static str, PathBuf); 6] {
+pub fn folders(paths: &crate::state::DataPaths) -> [(&'static str, PathBuf); 7] {
     [
+        ("www", paths.www.clone()),
         ("packages", paths.packages.clone()),
         ("data", paths.data.clone()),
         ("backups", paths.backups.clone()),

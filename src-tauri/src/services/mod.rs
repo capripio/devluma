@@ -13,6 +13,7 @@ pub mod preferences;
 pub mod projects;
 pub mod recovery;
 pub mod runtime;
+pub mod scheduler;
 pub mod setup;
 pub mod sites;
 pub mod storage;

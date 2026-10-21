@@ -97,6 +97,15 @@ fn build_app<R: tauri::Runtime>(
             commands::settings::open_terminal,
             commands::settings::get_storage_usage,
             commands::settings::open_storage_folder,
+            commands::scheduler::list_scheduled_jobs,
+            commands::scheduler::preview_scheduled_job,
+            commands::scheduler::save_scheduled_job,
+            commands::scheduler::set_scheduled_job_enabled,
+            commands::scheduler::run_scheduled_job_now,
+            commands::scheduler::stop_scheduled_job_run,
+            commands::scheduler::delete_scheduled_job,
+            commands::scheduler::list_scheduled_job_runs,
+            commands::scheduler::get_scheduled_job_run_log,
         ])
         .build(context)?;
     let dir = match data_dir {
@@ -107,7 +116,9 @@ fn build_app<R: tauri::Runtime>(
         std::sync::Arc::new(app.handle().clone());
     let states: std::sync::Arc<dyn services::supervisor::StateSink> =
         std::sync::Arc::new(app.handle().clone());
-    let state = state::initialize(&dir, sink, states);
+    let jobs: std::sync::Arc<dyn services::scheduler::SchedulerSink> =
+        std::sync::Arc::new(app.handle().clone());
+    let state = state::initialize(&dir, sink, states, jobs);
     if let Some(sup) = &state.supervisor {
         // Re-adopt services still running from a previous session, then keep checking health.
         sup.reconcile();
@@ -123,6 +134,10 @@ fn build_app<R: tauri::Runtime>(
         for id in start {
             let _ = sup.start(&id);
         }
+    }
+    // Scheduled jobs (ADR 0017) run while Devluma is open.
+    if let Some(s) = &state.scheduler {
+        s.spawn_loop();
     }
     app.manage(state);
     Ok(app)
@@ -170,6 +185,9 @@ pub fn run() {
             let state = app.state::<state::AppState>();
             if let Some(t) = &state.tunnels {
                 t.stop_all();
+            }
+            if let Some(s) = &state.scheduler {
+                s.stop_all();
             }
             if let Some(sup) = &state.supervisor {
                 sup.stop_all_blocking();

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-delete-scheduled-job"
+description = "Enables the delete_scheduled_job command without any pre-configured scope."
+commands.allow = ["delete_scheduled_job"]
+
+[[permission]]
+identifier = "deny-delete-scheduled-job"
+description = "Denies the delete_scheduled_job command without any pre-configured scope."
+commands.deny = ["delete_scheduled_job"]

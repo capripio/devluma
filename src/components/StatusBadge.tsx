@@ -5,11 +5,14 @@ import {
   CircleHelp,
   CircleMinus,
   CircleStop,
+  CirclePause,
+  CircleSlash,
+  Clock,
   CircleX,
   LoaderCircle,
   type LucideIcon,
 } from "lucide-react";
-import type { OperationStatus, ServiceState } from "../types/dto";
+import type { JobStatus, OperationStatus, RunStatus, ServiceState } from "../types/dto";
 
 type Tone = "success" | "warning" | "danger" | "neutral" | "accent";
 
@@ -67,4 +70,29 @@ export function ServiceStatusBadge({ state }: { state: ServiceState }) {
 
 export function OperationStatusBadge({ status }: { status: OperationStatus }) {
   return <Badge spec={OPERATION[status]} />;
+}
+
+// Scheduler (ADR 0017): the four job states the Scheduler page and status bar use.
+const JOB: Record<JobStatus, StatusSpec> = {
+  active: { label: "Active", tone: "success", icon: Clock },
+  executing: { label: "Executing", tone: "accent", icon: LoaderCircle, spin: true },
+  muted: { label: "Muted", tone: "neutral", icon: CirclePause },
+  failed: { label: "Failed", tone: "danger", icon: CircleX },
+};
+
+const RUN: Record<RunStatus, StatusSpec> = {
+  running: { label: "Running", tone: "accent", icon: LoaderCircle, spin: true },
+  succeeded: { label: "Succeeded", tone: "success", icon: CircleCheck },
+  failed: { label: "Failed", tone: "danger", icon: CircleX },
+  timed_out: { label: "Timed out", tone: "danger", icon: CircleAlert },
+  skipped: { label: "Skipped", tone: "neutral", icon: CircleSlash },
+  stopped: { label: "Stopped", tone: "neutral", icon: CircleStop },
+};
+
+export function JobStatusBadge({ status }: { status: JobStatus }) {
+  return <Badge spec={JOB[status]} />;
+}
+
+export function RunStatusBadge({ status }: { status: RunStatus }) {
+  return <Badge spec={RUN[status]} />;
 }

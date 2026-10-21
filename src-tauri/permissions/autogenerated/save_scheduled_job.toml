@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-scheduled-job"
+description = "Enables the save_scheduled_job command without any pre-configured scope."
+commands.allow = ["save_scheduled_job"]
+
+[[permission]]
+identifier = "deny-save-scheduled-job"
+description = "Denies the save_scheduled_job command without any pre-configured scope."
+commands.deny = ["save_scheduled_job"]

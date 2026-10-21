@@ -92,6 +92,15 @@ fn main() {
                 "open_terminal",
                 "get_storage_usage",
                 "open_storage_folder",
+                "list_scheduled_jobs",
+                "preview_scheduled_job",
+                "save_scheduled_job",
+                "set_scheduled_job_enabled",
+                "run_scheduled_job_now",
+                "stop_scheduled_job_run",
+                "delete_scheduled_job",
+                "list_scheduled_job_runs",
+                "get_scheduled_job_run_log",
             ])),
     )
     .expect("failed to run tauri-build");

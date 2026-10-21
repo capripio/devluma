@@ -1,5 +1,6 @@
-//! Project registration. Devluma only records metadata about a folder the user chooses; it
-//! never writes into project folders, and removing a project never deletes its files.
+//! Project registration. Projects live in `<root>\www\<folder>`; Devluma creates the folder
+//! when it doesn't exist yet but never writes into it, and removing a project never deletes
+//! its files.
 
 use std::path::{Path, PathBuf};
 
@@ -21,39 +22,60 @@ fn simplify(p: &Path) -> PathBuf {
     }
 }
 
-/// Validates a user-entered project folder and returns its canonical form.
-pub fn validate_root(input: &str, paths: &DataPaths) -> Result<String, IpcError> {
-    let raw = Path::new(input.trim());
-    if !raw.is_absolute() {
-        return Err(invalid(
-            "Enter the full folder path, for example D:\\code\\my-app.",
-        ));
+/// Resolves a folder relative to `www\` (for example `shop` or `clients\shop`). Absolute
+/// paths, `..` and Windows-hostile names are rejected.
+fn project_dir(folder: &str, paths: &DataPaths) -> Result<PathBuf, IpcError> {
+    let folder = folder.trim();
+    let example = "Enter a folder inside www, for example my-app.";
+    let dir = crate::security::paths::join_relative(&paths.www, folder).map_err(|e| match e {
+        crate::security::paths::PathError::Invalid(why) => invalid(format!("{example} ({why})")),
+        crate::security::paths::PathError::Escapes => invalid(example),
+    })?;
+    if dir == paths.www {
+        return Err(invalid(example));
     }
-    let canonical = std::fs::canonicalize(raw)
-        .map_err(|_| invalid("That folder doesn't exist or can't be opened."))?;
-    if !canonical.is_dir() {
-        return Err(invalid("That path is a file, not a folder."));
-    }
-    // Projects must not live inside Devluma's own managed folders.
-    if let Ok(root) = std::fs::canonicalize(&paths.root)
-        && canonical.starts_with(&root)
-    {
-        return Err(invalid("Choose a folder outside Devluma's data folder."));
-    }
-    Ok(simplify(&canonical).display().to_string())
+    Ok(dir)
 }
 
+/// Registers `www\<folder>` as a project, creating the folder if it doesn't exist yet. An
+/// existing folder (for example a cloned repository) is used as it is.
 pub fn create(
     db: &Database,
     paths: &DataPaths,
     name: &str,
-    root: &str,
+    folder: &str,
 ) -> Result<Project, IpcError> {
-    let root = validate_root(root, paths)?;
     let name = name.trim();
     if name.is_empty() {
         return Err(invalid("Enter a project name."));
     }
+    let dir = project_dir(folder, paths)?;
+    if dir.exists() && !dir.is_dir() {
+        return Err(invalid("That path is a file, not a folder."));
+    }
+    // Folders this call creates, deepest first, so a failure removes them again (only while
+    // they are still empty).
+    let created: Vec<PathBuf> = dir
+        .ancestors()
+        .take_while(|a| *a != paths.www && !a.exists())
+        .map(Path::to_path_buf)
+        .collect();
+    let undo = || {
+        for d in &created {
+            let _ = std::fs::remove_dir(d);
+        }
+    };
+    std::fs::create_dir_all(&dir)
+        .map_err(|_| invalid("Devluma couldn't create that folder inside www."))?;
+    // A junction inside www must not lead a project elsewhere.
+    let canonical = match crate::security::paths::ensure_within(&paths.www, &dir) {
+        Ok(c) => c,
+        Err(_) => {
+            undo();
+            return Err(invalid("That folder leads outside www."));
+        }
+    };
+    let root = simplify(&canonical).display().to_string();
     db.write(|c| {
         if projects::list(c)?
             .iter()
@@ -73,7 +95,10 @@ pub fn create(
             },
         )
     })
-    .map_err(IpcError::from)
+    .map_err(|e| {
+        undo();
+        IpcError::from(e)
+    })
 }
 
 /// What a project folder looks like, judged only by which files exist (app_flow.md §6:
@@ -188,34 +213,72 @@ mod tests {
     }
 
     #[test]
-    fn creates_projects_for_existing_folders_only() {
+    fn creates_projects_inside_www_only() {
         let (dir, paths) = paths();
-        let project_dir = dir.path().join("shop");
-        std::fs::create_dir(&project_dir).unwrap();
         let db = db();
 
-        let p = create(&db, &paths, " Shop ", &project_dir.to_string_lossy()).unwrap();
+        // A missing folder is created.
+        let p = create(&db, &paths, " Shop ", "shop").unwrap();
         assert_eq!(p.name, "Shop");
+        assert!(paths.www.join("shop").is_dir());
         assert!(!p.root_path.starts_with(r"\\?\"), "{}", p.root_path);
+        assert!(p.root_path.ends_with(r"www\shop"), "{}", p.root_path);
 
-        let upper = project_dir.to_string_lossy().to_uppercase();
+        // An existing folder is used as it is, and its type detected.
+        std::fs::create_dir_all(paths.www.join(r"clients\blog")).unwrap();
+        std::fs::write(paths.www.join(r"clients\blog\index.html"), "").unwrap();
+        let blog = create(&db, &paths, "Blog", "clients/blog").unwrap();
+        assert_eq!(blog.project_type.as_deref(), Some("static"));
+
         assert!(
-            create(&db, &paths, "Again", &upper)
+            create(&db, &paths, "Again", "SHOP")
                 .unwrap_err()
                 .message
                 .contains("already added")
         );
-        assert!(create(&db, &paths, "x", "relative\\path").is_err());
-        assert!(
-            create(
-                &db,
-                &paths,
-                "x",
-                &dir.path().join("missing").to_string_lossy()
-            )
-            .is_err()
-        );
-        assert!(create(&db, &paths, "x", &paths.packages.to_string_lossy()).is_err());
-        assert!(create(&db, &paths, "  ", &project_dir.to_string_lossy()).is_err());
+        for bad in [
+            "",
+            ".",
+            r"..\escape",
+            r"shop\..\..\escape",
+            &dir.path().join("abs").to_string_lossy(),
+            r"C:\code\x",
+            "con",
+            "a:b",
+        ] {
+            assert!(create(&db, &paths, "x", bad).is_err(), "{bad}");
+        }
+        assert!(!dir.path().join("escape").exists());
+        assert!(!dir.path().join("abs").exists());
+        std::fs::write(paths.www.join("file.txt"), "").unwrap();
+        assert!(create(&db, &paths, "x", "file.txt").is_err());
+        assert!(create(&db, &paths, "  ", "other").is_err());
+        assert!(!paths.www.join("other").exists());
+    }
+
+    #[test]
+    fn a_failed_create_removes_only_the_folders_it_made() {
+        let (_dir, paths) = paths();
+        let db = db();
+        create(&db, &paths, "Shop", "shop").unwrap();
+        std::fs::write(paths.www.join(r"shop\keep.txt"), "").unwrap();
+        // The same folder written differently: rejected as a duplicate, folder kept.
+        assert!(create(&db, &paths, "Shop", r"shop\.").is_err());
+        assert!(paths.www.join(r"shop\keep.txt").is_file());
+
+        // A junction inside www that leads elsewhere is refused and the new folders removed.
+        let outside = tempfile::tempdir().unwrap();
+        let link = paths.www.join("linked");
+        let system = std::env::var("SystemRoot").unwrap();
+        let out = std::process::Command::new(format!(r"{system}\System32\cmd.exe"))
+            .args(["/d", "/c", "mklink", "/J"])
+            .arg(&link)
+            .arg(outside.path())
+            .output()
+            .unwrap();
+        assert!(out.status.success());
+        let err = create(&db, &paths, "x", r"linked\new\deep").unwrap_err();
+        assert!(err.message.contains("outside www"), "{}", err.message);
+        assert!(!outside.path().join("new").exists());
     }
 }

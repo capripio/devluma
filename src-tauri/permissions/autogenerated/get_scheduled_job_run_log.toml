@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-scheduled-job-run-log"
+description = "Enables the get_scheduled_job_run_log command without any pre-configured scope."
+commands.allow = ["get_scheduled_job_run_log"]
+
+[[permission]]
+identifier = "deny-get-scheduled-job-run-log"
+description = "Denies the get_scheduled_job_run_log command without any pre-configured scope."
+commands.deny = ["get_scheduled_job_run_log"]

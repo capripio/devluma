@@ -2,6 +2,7 @@ import { ChevronUp, CircleAlert, CircleCheck, ListChecks } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { OperationTray } from "../components/OperationTray";
+import { useScheduledJobs } from "../features/scheduler/useScheduledJobs";
 import { useServices } from "../features/services/useServices";
 import { ipc } from "../lib/ipc";
 import { useAsync } from "../lib/useAsync";
@@ -34,11 +35,12 @@ export function StatusBar() {
   return (
     <footer className="relative flex h-7 shrink-0 items-center gap-4 border-t border-border bg-surface-sunken px-3 text-xs text-fg-muted">
       <StackHealth />
+      <FailedJobs />
       {current && (
         <span className="flex min-w-0 items-center gap-2">
           <span className="truncate">
             {describeOperationType(current.operationType)}
-            {current.phase ? ` — ${current.phase}` : ""}
+            {current.phase ? `: ${current.phase}` : ""}
           </span>
           {current.total !== undefined && current.current !== undefined && (
             <progress
@@ -116,5 +118,22 @@ function StackHealth() {
         </Link>
       )}
     </span>
+  );
+}
+
+/** Scheduled jobs whose last run failed (ADR 0017). */
+function FailedJobs() {
+  const jobs = useScheduledJobs();
+  if (jobs.status !== "success") return null;
+  const failed = jobs.data.filter((j) => j.status === "failed");
+  if (failed.length === 0) return null;
+  return (
+    <Link
+      to={failed.length === 1 && failed[0] ? `/scheduler/${failed[0].id}` : "/scheduler"}
+      className="flex items-center gap-1.5 rounded px-1 font-semibold text-danger hover:underline"
+    >
+      <CircleAlert aria-hidden className="size-3.5" />
+      {failed.length} job{failed.length === 1 ? "" : "s"} failed
+    </Link>
   );
 }

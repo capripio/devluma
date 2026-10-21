@@ -50,6 +50,8 @@ export const startupStatusSchema = z.object({
   dataDir: z.string(),
   databasePath: z.string(),
   backupsDir: z.string(),
+  /** New projects are created here (`<root>\www`). */
+  projectsDir: z.string(),
   error: ipcErrorShape.optional(),
   recovery: z
     .object({
@@ -205,6 +207,7 @@ export const projectSchema = z.object({
   updatedAt: z.string(),
   lastOpenedAt: z.string().nullable(),
 });
+export type Project = z.infer<typeof projectSchema>;
 export const projectViewSchema = projectSchema.extend({
   detection: z.object({
     kind: z.string().nullable(),
@@ -607,3 +610,75 @@ export const storageUsageSchema = z.object({
   folders: z.array(z.object({ key: z.string(), path: z.string(), bytes: z.number(), files: z.number() })),
 });
 export type StorageUsage = z.infer<typeof storageUsageSchema>;
+
+// Scheduled jobs (ADR 0017) — mirrors `services::scheduler` and `persistence::scheduler`.
+export const JOB_KINDS = ["artisan_schedule", "php_script", "command"] as const;
+export const jobKindSchema = z.enum(JOB_KINDS);
+export type JobKind = z.infer<typeof jobKindSchema>;
+export const JOB_STATUSES = ["active", "executing", "muted", "failed"] as const;
+export type JobStatus = (typeof JOB_STATUSES)[number];
+export const RUN_STATUSES = ["running", "succeeded", "failed", "timed_out", "skipped", "stopped"] as const;
+export type RunStatus = (typeof RUN_STATUSES)[number];
+
+export const jobRunSchema = z.object({
+  id: z.string(),
+  jobId: z.string(),
+  trigger: z.string(),
+  status: z.enum(RUN_STATUSES),
+  exitCode: z.number().int().nullable(),
+  message: z.string().nullable(),
+  startedAt: z.string(),
+  finishedAt: z.string().nullable(),
+});
+export type JobRun = z.infer<typeof jobRunSchema>;
+
+export const commandPreviewSchema = z.object({
+  executable: z.string(),
+  args: z.array(z.string()),
+  workingDir: z.string(),
+  pathPrefix: z.array(z.string()),
+});
+export type CommandPreview = z.infer<typeof commandPreviewSchema>;
+
+export const jobViewSchema = z.object({
+  id: z.string(),
+  projectId: z.string(),
+  projectName: z.string(),
+  name: z.string(),
+  kind: jobKindSchema,
+  program: z.string().nullable(),
+  args: z.array(z.string()),
+  cron: z.string(),
+  scheduleText: z.string(),
+  enabled: z.boolean(),
+  timeoutSecs: z.number().int(),
+  status: z.enum(JOB_STATUSES),
+  nextRun: z.string().nullable(),
+  lastRun: jobRunSchema.nullable(),
+  runningSince: z.string().nullable(),
+  command: commandPreviewSchema.nullable(),
+  problem: z.string().nullable(),
+});
+export type JobView = z.infer<typeof jobViewSchema>;
+
+export const jobPreviewSchema = z.object({
+  command: commandPreviewSchema,
+  cron: z.string(),
+  scheduleText: z.string(),
+  nextRuns: z.array(z.string()),
+});
+export type JobPreview = z.infer<typeof jobPreviewSchema>;
+
+export interface JobRequest {
+  id?: string;
+  projectId: string;
+  name: string;
+  kind: JobKind;
+  program?: string;
+  args: string[];
+  cron: string;
+  timeoutSecs: number;
+  enabled: boolean;
+}
+
+export const jobEventSchema = z.object({ jobId: z.string() });

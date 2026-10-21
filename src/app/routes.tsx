@@ -10,6 +10,7 @@ import { ProjectsPage } from "../features/projects/ProjectsPage";
 import { PackageDetailPage } from "../features/runtimes/PackageDetailPage";
 import { PhpInstallationPage } from "../features/runtimes/PhpInstallationPage";
 import { RuntimesPage } from "../features/runtimes/RuntimesPage";
+import { SchedulerPage } from "../features/scheduler/SchedulerPage";
 import { ServicesPage } from "../features/services/ServicesPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
 import { SitesPage } from "../features/sites/SitesPage";
@@ -30,6 +31,10 @@ export const routes: RouteObject[] = [
       { path: "projects", element: <ProjectsPage /> },
       { path: "services", element: <ServicesPage />, handle: pane },
       { path: "services/:serviceId", element: <ServicesPage />, handle: pane },
+      { path: "scheduler", element: <SchedulerPage mode="list" />, handle: pane },
+      { path: "scheduler/new", element: <SchedulerPage mode="new" />, handle: pane },
+      { path: "scheduler/:jobId", element: <SchedulerPage mode="detail" />, handle: pane },
+      { path: "scheduler/:jobId/edit", element: <SchedulerPage mode="edit" />, handle: pane },
       { path: "runtimes", element: <RuntimesPage /> },
       { path: "runtimes/:packageId", element: <PackageDetailPage /> },
       { path: "runtimes/php/installations/:installationId", element: <PhpInstallationPage /> },

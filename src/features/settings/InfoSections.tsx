@@ -12,6 +12,7 @@ import { SettingsSection } from "./PreferenceSections";
 import { LoadingState } from "../../components/LoadingState";
 
 const FOLDER_LABELS: Record<string, string> = {
+  www: "Projects",
   packages: "Downloaded tools",
   data: "Database data",
   backups: "Backups",
