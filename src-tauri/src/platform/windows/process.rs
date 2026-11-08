@@ -29,7 +29,7 @@ pub enum RunError {
 }
 
 pub fn run_captured(exe: &Path, args: &[&str], timeout: Duration) -> Result<Output, RunError> {
-    run_captured_with_input(exe, args, None, timeout)
+    run(exe, args, None, &[], timeout)
 }
 
 /// Like `run_captured`, with a file as standard input (e.g. a SQL dump for a client that
@@ -38,6 +38,27 @@ pub fn run_captured_with_input(
     exe: &Path,
     args: &[&str],
     input: Option<&Path>,
+    timeout: Duration,
+) -> Result<Output, RunError> {
+    run(exe, args, input, &[], timeout)
+}
+
+/// Like `run_captured`, plus a few fixed variables chosen by compiled code (e.g. Caddy's
+/// `XDG_DATA_HOME`, so its tools never write outside the service folder).
+pub fn run_captured_env(
+    exe: &Path,
+    args: &[&str],
+    env: &[(String, String)],
+    timeout: Duration,
+) -> Result<Output, RunError> {
+    run(exe, args, None, env, timeout)
+}
+
+fn run(
+    exe: &Path,
+    args: &[&str],
+    input: Option<&Path>,
+    env: &[(String, String)],
     timeout: Duration,
 ) -> Result<Output, RunError> {
     let stdin = match input {
@@ -66,6 +87,9 @@ pub fn run_captured_with_input(
             "PATH",
             format!("{};{}", root.join("System32").display(), root.display()),
         );
+    }
+    for (k, v) in env {
+        cmd.env(k, v);
     }
     let mut child = cmd.spawn().map_err(RunError::Spawn)?;
 

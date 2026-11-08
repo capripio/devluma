@@ -1,4 +1,4 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { isActive, useOnOperationsSettled, useOperations } from "../../app/operations";
@@ -203,6 +203,12 @@ function VersionRow({
         ) : status === "installed" ? (
           <span className="flex flex-col gap-1">
             <span>Installed{v.installation?.isGlobalDefault ? " (default)" : ""}</span>
+            {v.supersededBy && (
+              <span className="flex items-start gap-1 text-xs text-warning">
+                <TriangleAlert aria-hidden className="mt-0.5 size-3.5 shrink-0" />
+                Update available: {v.supersededBy} fixes bugs and security issues.
+              </span>
+            )}
             <span className="flex items-center gap-1 font-mono text-xs text-fg-muted">
               <span className="break-all">{v.installation?.installPath}</span>
               <CopyButton value={v.installation?.installPath ?? ""} label="install path" />

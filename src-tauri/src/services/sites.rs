@@ -67,13 +67,26 @@ pub struct HttpsPlan {
     pub ca_trusted: bool,
 }
 
+impl PhpChoice {
+    fn handler(&self) -> PhpHandler {
+        if self.embedded {
+            PhpHandler::Embedded
+        } else {
+            PhpHandler::FastCgi(self.port)
+        }
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PhpChoice {
     pub installation_id: String,
     pub version: String,
-    /// Existing backend port, or the one that would be assigned.
+    /// Existing backend port, or the one that would be assigned (0 when embedded).
     pub port: u16,
+    /// PHP built into the web server (FrankenPHP): no backend, and the project's PHP pin
+    /// doesn't apply.
+    pub embedded: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -103,7 +116,10 @@ pub struct SiteView {
     pub web_server_running: bool,
     pub url: String,
     pub https_url: Option<String>,
+    /// The php-cgi backend's PHP version (not set for PHP built into the web server).
     pub php_version: Option<String>,
+    /// PHP built into the web server (FrankenPHP): its version.
+    pub embedded_php: Option<String>,
     /// The project's effective PHP differs from the one this site was applied with.
     pub php_outdated: bool,
     pub config_present: bool,
@@ -198,6 +214,9 @@ fn http_probe(domain: &str, port: u16) -> std::io::Result<(u16, Option<String>)>
 pub enum WebServerKind {
     Nginx,
     Apache,
+    Caddy,
+    /// Caddy with PHP built in (ADR 0019): the same site blocks, PHP through `php_server`.
+    Frankenphp,
 }
 
 impl WebServerKind {
@@ -205,6 +224,8 @@ impl WebServerKind {
         match svc.lifecycle_adapter.as_str() {
             "nginx" => Some(Self::Nginx),
             "apache" => Some(Self::Apache),
+            "caddy" => Some(Self::Caddy),
+            "frankenphp" => Some(Self::Frankenphp),
             _ => None,
         }
     }
@@ -222,8 +243,26 @@ pub struct SiteConfig<'a> {
     pub web_install: &'a Path,
     /// The web server service's folder (Apache: absolute log paths).
     pub service_dir: &'a Path,
-    pub php_port: Option<u16>,
+    pub php: Option<PhpHandler>,
     pub https: Option<HttpsConfig>,
+}
+
+/// How a site runs PHP.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PhpHandler {
+    /// A php-cgi backend on this loopback port (ADR 0009).
+    FastCgi(u16),
+    /// PHP built into the web server (FrankenPHP).
+    Embedded,
+}
+
+impl PhpHandler {
+    fn fastcgi_port(handler: Option<Self>) -> Option<u16> {
+        match handler {
+            Some(Self::FastCgi(p)) => Some(p),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -237,7 +276,53 @@ pub fn render_config(c: &SiteConfig<'_>) -> String {
     match c.server {
         WebServerKind::Nginx => render_nginx(c),
         WebServerKind::Apache => render_apache(c),
+        WebServerKind::Caddy | WebServerKind::Frankenphp => render_caddy(c),
     }
+}
+
+/// Caddy site blocks (ADR 0019). The `http://`/`https://` scheme pins each block to one
+/// protocol, and with `auto_https off` Caddy never issues certificates or adds redirects.
+fn render_caddy(c: &SiteConfig<'_>) -> String {
+    let (site_id, domain) = (c.site_id, c.domain);
+    // `devluma_php` (defined in the generated Caddyfile) is Caddy's php_fastcgi with the
+    // Settings tab's timeout: `try_files {path} {path}/index.php index.php` (front controllers
+    // such as Laravel's) and SCRIPT_FILENAME from the document root. FrankenPHP's is
+    // `php_server`, which also serves static files, so no `file_server` follows it.
+    let (php, files) = match c.php {
+        Some(PhpHandler::FastCgi(p)) => (
+            format!("\timport devluma_php {LOOPBACK}:{p}\n"),
+            "\tfile_server\n",
+        ),
+        Some(PhpHandler::Embedded) => ("\timport devluma_php\n".to_owned(), ""),
+        None => (String::new(), "\tfile_server\n"),
+    };
+    let body = format!(
+        "\timport devluma_settings\n\
+         \troot * \"{root}\"\n\
+         \theader {SITE_HEADER} \"{site_id}\"\n\
+         \tlog {{\n\
+         \t\toutput file \"{logs}/site-{site_id}.access.log\"\n\
+         \t}}\n\
+         {php}\
+         {files}",
+        root = ng(c.document_root),
+        logs = ng(&c.service_dir.join("logs")),
+    );
+    let mut out = format!(
+        "# Managed by Devluma for {domain} (site {site_id}). Regenerated whenever the site is applied.\n\
+         http://{domain}:{port} {{\n{body}}}\n",
+        port = c.http_port,
+    );
+    if let Some(h) = &c.https {
+        out.push_str(&format!(
+            "https://{domain}:{port} {{\n\
+             \ttls \"{cert}\" \"{key}\"\n{body}}}\n",
+            port = h.port,
+            cert = ng(&h.certificate),
+            key = ng(&h.key),
+        ));
+    }
+    out
 }
 
 fn render_apache(c: &SiteConfig<'_>) -> String {
@@ -256,7 +341,7 @@ fn render_apache(c: &SiteConfig<'_>) -> String {
          \x20   Require all granted\n\
          \x20 </Directory>\n",
     );
-    match c.php_port {
+    match PhpHandler::fastcgi_port(c.php) {
         // Verified against Apache Lounge 2.4.69 + php-cgi on Windows:
         // - trailing slash: Apache appends the script path, and "…:9001C:/…" isn't an address;
         // - GENERIC: php-cgi isn't PHP-FPM;
@@ -307,7 +392,7 @@ fn render_nginx(c: &SiteConfig<'_>) -> String {
          \x20 add_header {SITE_HEADER} \"{site_id}\" always;\n",
         root = ng(c.document_root),
     );
-    match c.php_port {
+    match PhpHandler::fastcgi_port(c.php) {
         Some(p) => body.push_str(&format!(
             "  index index.php index.html index.htm;\n\
              \x20 location / {{\n\
@@ -430,7 +515,7 @@ impl SiteService {
         if WebServerKind::of(&svc).is_none() {
             return Err(failure(
                 ErrorCode::ValidationError,
-                "Sites need a web server service (Nginx or Apache).",
+                "Sites need a web server service (Nginx, Apache, Caddy or FrankenPHP).",
             ));
         }
         Ok(svc)
@@ -475,12 +560,11 @@ impl SiteService {
             .ok_or_else(|| failure(ErrorCode::ValidationError, "The web server has no port."))?;
         let server = WebServerKind::of(&web).unwrap_or(WebServerKind::Nginx);
         let service_dir = self.supervisor.service_dir(&web.id);
-        let web_install = PathBuf::from(
-            self.db
-                .read(|c| installations::get(c, &web.package_installation_id))
-                .map_err(db_fail)?
-                .install_path,
-        );
+        let web_inst = self
+            .db
+            .read(|c| installations::get(c, &web.package_installation_id))
+            .map_err(db_fail)?;
+        let web_install = PathBuf::from(&web_inst.install_path);
 
         let project_root = PathBuf::from(&project.root_path);
         let docroot_input = req
@@ -493,7 +577,15 @@ impl SiteService {
             });
         let document_root = check_document_root(&project_root, &docroot_input)?;
 
-        let php = if req.use_php {
+        let php = if req.use_php && server == WebServerKind::Frankenphp {
+            // FrankenPHP runs its own PHP: no backend, no project pin.
+            Some(PhpChoice {
+                installation_id: web_inst.id.clone(),
+                version: super::frankenphp::php_version(&web_inst).unwrap_or_default(),
+                port: 0,
+                embedded: true,
+            })
+        } else if req.use_php {
             let sel = self
                 .db
                 .read(|c| super::runtime::effective(c, Some(&project.id), "php"))
@@ -512,6 +604,7 @@ impl SiteService {
                 installation_id: sel.installation_id,
                 version: sel.version,
                 port,
+                embedded: false,
             })
         } else {
             None
@@ -573,7 +666,7 @@ impl SiteService {
             server,
             web_install: &web_install,
             service_dir: &service_dir,
-            php_port: php.as_ref().map(|p| p.port),
+            php: php.as_ref().map(PhpChoice::handler),
             https: https_config,
         });
         let current = std::fs::read_to_string(&config_path).unwrap_or_default();
@@ -593,6 +686,12 @@ impl SiteService {
         };
 
         let mut warnings = domain.warnings.clone();
+        if let Some(p) = php.as_ref().filter(|p| p.embedded) {
+            warnings.push(format!(
+                "{} serves PHP {} itself; {}'s PHP version pin doesn't apply to this site.",
+                web.instance_name, p.version, project.name
+            ));
+        }
         let running = matches!(
             web.observed_state,
             crate::domain::service::ServiceState::Running
@@ -683,7 +782,7 @@ impl SiteService {
                 .map_err(db_fail)?
                 .install_path,
         );
-        if let Some(php) = &mut plan.php {
+        if let Some(php) = plan.php.as_mut().filter(|p| !p.embedded) {
             let _ = journal.progress(op, "Starting the PHP backend", None, None);
             let backend = self
                 .supervisor
@@ -708,7 +807,7 @@ impl SiteService {
             server,
             web_install: &web_install,
             service_dir: &service_dir,
-            php_port: plan.php.as_ref().map(|p| p.port),
+            php: plan.php.as_ref().map(PhpChoice::handler),
             https: plan
                 .https
                 .as_ref()
@@ -982,12 +1081,16 @@ impl SiteService {
             .map(|site| {
                 let project_name = projects.iter().find(|p| p.id == site.project_id).map(|p| p.name.clone()).unwrap_or_default();
                 let web = self.supervisor.service(&site.web_server_service_id).ok();
-                let php_version = site
+                let php_inst = site
                     .php_installation_id
                     .as_ref()
-                    .and_then(|id| insts.iter().find(|i| &i.id == id))
+                    .and_then(|id| insts.iter().find(|i| &i.id == id));
+                let embedded = php_inst.filter(|i| i.package_id == super::frankenphp::PACKAGE_ID);
+                let embedded_php = embedded.map(|i| super::frankenphp::php_version(i).unwrap_or_default());
+                let php_version = php_inst
+                    .filter(|_| embedded.is_none())
                     .map(|i| version_of(&i.package_version_id));
-                let effective = site.php_installation_id.as_ref().and_then(|_| {
+                let effective = php_version.as_ref().and_then(|_| {
                     self.db
                         .read(|c| super::runtime::effective(c, Some(&site.project_id), "php"))
                         .ok()
@@ -1008,6 +1111,7 @@ impl SiteService {
                     web_server_running: web.as_ref().is_some_and(|w| w.observed_state.is_live()),
                     project_name,
                     php_version,
+                    embedded_php,
                     site,
                 }
             })
@@ -1043,7 +1147,7 @@ mod tests {
             http_port: 8080,
             document_root: Path::new(r"D:\code\shop\public"),
             web_install: Path::new(r"C:\Devluma\packages\nginx\1.30.5-x64"),
-            php_port: None,
+            php: None,
             https: None,
         };
         let s = render_config(&base);
@@ -1052,7 +1156,7 @@ mod tests {
         assert!(!s.contains("fastcgi_pass") && !s.contains("ssl"));
 
         let p = render_config(&SiteConfig {
-            php_port: Some(9001),
+            php: Some(PhpHandler::FastCgi(9001)),
             ..base
         });
         assert!(p.contains("fastcgi_pass 127.0.0.1:9001;"));
@@ -1062,7 +1166,7 @@ mod tests {
         assert!(p.contains("location ~ \\.php$"));
 
         let h = render_config(&SiteConfig {
-            php_port: Some(9001),
+            php: Some(PhpHandler::FastCgi(9001)),
             https: Some(HttpsConfig {
                 port: 8443,
                 certificate: PathBuf::from(r"C:\c\cert.pem"),
@@ -1093,7 +1197,7 @@ mod tests {
             http_port: 8081,
             document_root: Path::new(r"D:\code\shop\public"),
             web_install: Path::new(r"C:\Devluma\packages\apache\2.4.69-x64"),
-            php_port: Some(9001),
+            php: Some(PhpHandler::FastCgi(9001)),
             https: Some(HttpsConfig {
                 port: 8444,
                 certificate: PathBuf::from(r"C:\c\cert.pem"),
@@ -1118,6 +1222,69 @@ mod tests {
         );
         assert!(a.contains("SSLCertificateKeyFile \"C:/c/key.pem\""));
         assert!(!a.contains("server {"), "no nginx syntax");
+    }
+
+    #[test]
+    fn renders_caddy_site_blocks() {
+        let c = SiteConfig {
+            server: WebServerKind::Caddy,
+            service_dir: Path::new(r"C:\Devluma\services\w3"),
+            site_id: "s1",
+            domain: "shop.test",
+            http_port: 8082,
+            document_root: Path::new(r"D:\code\shop\public"),
+            web_install: Path::new(r"C:\Devluma\packages\caddy\2.11.9-x64"),
+            php: Some(PhpHandler::FastCgi(9001)),
+            https: Some(HttpsConfig {
+                port: 8445,
+                certificate: PathBuf::from(r"C:\c\cert.pem"),
+                key: PathBuf::from(r"C:\c\key.pem"),
+            }),
+        };
+        let s = render_config(&c);
+        assert!(s.contains("http://shop.test:8082 {\n"));
+        assert!(s.contains("https://shop.test:8445 {\n\ttls \"C:/c/cert.pem\" \"C:/c/key.pem\"\n"));
+        assert_eq!(
+            s.matches("\timport devluma_php 127.0.0.1:9001\n").count(),
+            2
+        );
+        assert_eq!(s.matches("\timport devluma_settings\n").count(), 2);
+        assert_eq!(s.matches("\theader X-Devluma-Site \"s1\"\n").count(), 2);
+        assert!(s.contains("\troot * \"D:/code/shop/public\"\n"));
+        assert!(s.contains("output file \"C:/Devluma/services/w3/logs/site-s1.access.log\""));
+        assert!(!s.contains('\\'), "forward slashes only");
+        assert_eq!(s.matches('{').count(), s.matches('}').count());
+
+        let plain = render_config(&SiteConfig {
+            php: None,
+            https: None,
+            ..c
+        });
+        assert!(!plain.contains("devluma_php") && !plain.contains("https://"));
+        assert!(plain.contains("\tfile_server\n"));
+        assert!(
+            s.contains("\tfile_server\n"),
+            "php_fastcgi needs file_server for static files"
+        );
+
+        // FrankenPHP: its own PHP through php_server, which also serves static files.
+        let f = render_config(&SiteConfig {
+            server: WebServerKind::Frankenphp,
+            php: Some(PhpHandler::Embedded),
+            ..c
+        });
+        assert_eq!(f.matches("\timport devluma_php\n").count(), 2);
+        assert!(!f.contains("127.0.0.1:9001") && !f.contains("file_server"));
+        assert!(f.contains("https://shop.test:8445 {\n\ttls "));
+
+        // nginx and Apache never get an embedded handler; they'd render no PHP at all.
+        let n = render_config(&SiteConfig {
+            server: WebServerKind::Nginx,
+            php: Some(PhpHandler::Embedded),
+            https: None,
+            ..c
+        });
+        assert!(!n.contains("fastcgi_pass"));
     }
 
     #[test]
@@ -1166,7 +1333,99 @@ mod live {
             .port()
     }
 
-    /// Both web servers would pick the same HTTPS port (8443); run them one at a time.
+    /// Raw HTTP/1.1 request to shop.test on loopback; returns the response head.
+    fn raw_request(port: u16, request_line: &str, extra: &str, body: &[u8]) -> String {
+        use std::io::{Read, Write};
+        let mut s = std::net::TcpStream::connect(("127.0.0.1", port)).unwrap();
+        s.set_read_timeout(Some(Duration::from_secs(10))).unwrap();
+        write!(
+            s,
+            "{request_line} HTTP/1.1\r\nHost: shop.test:{port}\r\n{extra}Content-Length: {}\r\nConnection: close\r\n\r\n",
+            body.len()
+        )
+        .unwrap();
+        // The server may answer (and close) before reading a body it refuses.
+        let _ = s.write_all(body);
+        let mut out = Vec::new();
+        let _ = s.read_to_end(&mut out);
+        let text = String::from_utf8_lossy(&out);
+        text.split("\r\n\r\n").next().unwrap_or_default().to_owned()
+    }
+
+    /// Caddy's Settings tab against the real binary: values rendered into the Caddyfile are
+    /// accepted by `caddy validate` + reload and enforced by the running server; then back to
+    /// defaults.
+    fn caddy_settings_take_effect(
+        db: &Database,
+        sup: &Arc<Supervisor>,
+        web_id: &str,
+        port: u16,
+        project_dir: &Path,
+    ) {
+        // Over Caddy's encode minimum length (512 bytes), so it's worth compressing.
+        std::fs::write(
+            project_dir.join("public").join("big.txt"),
+            "compress me ".repeat(500),
+        )
+        .unwrap();
+        let set = |values: &[(&str, Option<&str>)]| {
+            let changes = values
+                .iter()
+                .map(|(k, v)| ((*k).to_owned(), v.map(str::to_owned)))
+                .collect();
+            db.write(|c| crate::persistence::service_settings::update(c, web_id, &changes))
+                .unwrap();
+            sup.validate_config(web_id).unwrap();
+            assert!(sup.reload_if_running(web_id).unwrap());
+        };
+        let gzip = "Accept-Encoding: gzip\r\n";
+        let before = raw_request(port, "GET /big.txt", gzip, b"");
+        assert!(before.starts_with("HTTP/1.1 200"), "{before}");
+        assert!(!before.to_ascii_lowercase().contains("content-encoding"));
+
+        set(&[
+            ("max_size", Some("1")),
+            ("php_read_timeout", Some("30")),
+            ("idle_timeout", Some("600")),
+            ("encode", Some("on")),
+        ]);
+        let conf = std::fs::read_to_string(sup.service_dir(web_id).join("conf").join("Caddyfile"))
+            .unwrap();
+        assert!(conf.contains("max_size 1MiB") && conf.contains("read_timeout 30s"));
+        // A reload is asynchronous; poll briefly for the new config.
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        let compressed = loop {
+            let head = raw_request(port, "GET /big.txt", gzip, b"");
+            if head.to_ascii_lowercase().contains("content-encoding: gzip")
+                || std::time::Instant::now() >= deadline
+            {
+                break head;
+            }
+            std::thread::sleep(Duration::from_millis(200));
+        };
+        assert!(
+            compressed
+                .to_ascii_lowercase()
+                .contains("content-encoding: gzip"),
+            "{compressed}"
+        );
+        let too_big = raw_request(port, "POST /", "", &vec![b'x'; 2 * 1024 * 1024]);
+        assert!(too_big.starts_with("HTTP/1.1 413"), "{too_big}");
+        let small = raw_request(port, "POST /", "", &vec![b'x'; 1024]);
+        assert!(
+            small.starts_with("HTTP/1.1 200"),
+            "PHP through the devluma_php snippet with a read timeout: {small}"
+        );
+
+        set(&[
+            ("max_size", None),
+            ("php_read_timeout", None),
+            ("idle_timeout", None),
+            ("encode", None),
+        ]);
+    }
+
+    /// The web servers would pick the same HTTPS port (8443); run them one at a time.
     static ONE_AT_A_TIME: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
     /// `cargo test live_site -- --ignored` (downloads ~38 MB for Nginx, ~50 MB for Apache).
@@ -1179,7 +1438,22 @@ mod live {
     #[tokio::test(flavor = "multi_thread")]
     #[ignore = "uses the network and real services"]
     async fn live_site_with_apache_and_php() {
-        live_site_with("apache", "2.4.69").await;
+        live_site_with("apache", "2.4.70").await;
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "uses the network and real services"]
+    async fn live_site_with_caddy_and_php() {
+        live_site_with("caddy", "2.11.9").await;
+    }
+
+    /// `DEVLUMA_FRANKENPHP=<…rankenphp.exe> cargo test live_site_with_frankenphp -- --ignored`:
+    /// the user's own FrankenPHP (unzipped from its Windows release), registered like a user
+    /// would, serving the site with its built-in PHP.
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "uses real services and a user-provided FrankenPHP"]
+    async fn live_site_with_frankenphp() {
+        live_site_with("frankenphp", "").await;
     }
 
     /// Real web server + PHP from the bundled catalog: a PHP page served through FastCGI at a
@@ -1202,7 +1476,22 @@ mod live {
             download: DownloadOptions::default(),
         };
         let manager = Arc::new(InstallManager::default());
-        for (pkg, version) in [(web_pkg, web_version), ("php", "8.4.26")] {
+        let packages: &[(&str, &str)] = if web_pkg == "frankenphp" {
+            &[("php", "8.4.27-1")]
+        } else {
+            &[(web_pkg, web_version), ("php", "8.4.27-1")]
+        };
+        // FrankenPHP is never downloaded: the user's own copy is registered (ADR 0019).
+        let expected_php = if web_pkg == "frankenphp" {
+            let exe = std::env::var("DEVLUMA_FRANKENPHP")
+                .expect("set DEVLUMA_FRANKENPHP to frankenphp.exe from FrankenPHP's Windows zip");
+            let status = crate::services::frankenphp::set_path(&db, &exe).unwrap();
+            assert!(status.problem.is_none(), "{:?}", status.problem);
+            status.php_version.unwrap()
+        } else {
+            "8.4.27".to_owned()
+        };
+        for &(pkg, version) in packages {
             let (started, h) = manager
                 .start(
                     ctx.clone(),
@@ -1241,7 +1530,8 @@ mod live {
                 installation_id: inst(web_pkg),
                 name: "web".into(),
                 port: web_port,
-                admin_port: None,
+                // Caddy's admin API (graceful reload and stop go through it).
+                admin_port: matches!(web_pkg, "caddy" | "frankenphp").then(free_port),
                 data_path: None,
                 use_existing_data: false,
             })
@@ -1304,6 +1594,18 @@ mod live {
             https: false,
         };
         let plan = sites.preview(&req).unwrap();
+        let php_plan = plan.php.as_ref().unwrap();
+        assert_eq!(php_plan.embedded, web_pkg == "frankenphp");
+        if php_plan.embedded {
+            assert_eq!(php_plan.version, expected_php);
+            assert!(
+                plan.warnings
+                    .iter()
+                    .any(|w| w.contains("pin doesn't apply")),
+                "{:?}",
+                plan.warnings
+            );
+        }
         assert_eq!(plan.domain.normalized, "shop.test");
         assert!(plan.document_root.ends_with("public"));
         assert!(
@@ -1311,7 +1613,7 @@ mod live {
                 .as_ref()
                 .unwrap()
                 .diff
-                .contains("+127.0.0.1 shop.test")
+                .contains("+127.0.0.1\tshop.test\t# managed by devluma")
         );
 
         let (op, h) = sites
@@ -1331,9 +1633,20 @@ mod live {
         assert!(
             std::fs::read_to_string(&hosts_file)
                 .unwrap()
-                .contains("127.0.0.1 shop.test")
+                .contains("127.0.0.1\tshop.test\t# managed by devluma")
         );
 
+        let backends = db
+            .read(svcs::list)
+            .unwrap()
+            .into_iter()
+            .filter(|s| s.lifecycle_adapter == "php")
+            .count();
+        assert_eq!(
+            backends,
+            usize::from(web_pkg != "frankenphp"),
+            "a php-cgi backend only when PHP isn't built in"
+        );
         let check = sites.check_site(&plan.site_id);
         if check.status != Some(200) {
             // Show the web server's own explanation in the failure.
@@ -1368,7 +1681,43 @@ mod live {
             .text()
             .await
             .unwrap();
-        assert_eq!(body, "hello from PHP 8.4.26");
+        assert_eq!(body, format!("hello from PHP {expected_php}"));
+
+        if web_pkg == "frankenphp" {
+            // FrankenPHP's PHP reads the php.ini Devluma keeps in the service folder (PHPRC),
+            // with the bundled extensions it enabled.
+            std::fs::write(
+                project_dir.join("public").join("ini.php"),
+                "<?php echo php_ini_loaded_file(), '|', extension_loaded('mbstring') ? 'mbstring' : '-';",
+            )
+            .unwrap();
+            let ini = reqwest::Client::builder()
+                .resolve(
+                    "shop.test",
+                    std::net::SocketAddr::from(([127, 0, 0, 1], web_port)),
+                )
+                .build()
+                .unwrap()
+                .get(format!("http://shop.test:{web_port}/ini.php"))
+                .send()
+                .await
+                .unwrap()
+                .text()
+                .await
+                .unwrap();
+            let expected = sup.service_dir(&web.id).join("php").join("php.ini");
+            let (loaded, ext) = ini.split_once('|').unwrap_or_default();
+            assert!(
+                Path::new(loaded) == expected,
+                "{ini} (expected {})",
+                expected.display()
+            );
+            assert_eq!(ext, "mbstring");
+        }
+
+        if web_pkg == "caddy" {
+            caddy_settings_take_effect(&db, &sup, &web.id, web_port, &project_dir);
+        }
 
         // HTTPS with a certificate from the local CA, checked by a TLS client that trusts only
         // that CA (so the name-constrained chain must validate for real).
@@ -1412,7 +1761,7 @@ mod live {
             .text()
             .await
             .unwrap();
-        assert_eq!(body, "hello from PHP 8.4.26");
+        assert_eq!(body, format!("hello from PHP {expected_php}"));
         let bound = db
             .read(|c| crate::persistence::certificates::for_site(c, &plan.site_id))
             .unwrap()
@@ -1428,11 +1777,14 @@ mod live {
 
         // An invalid config is rejected and the working one is kept (and still serving).
         let good_config = std::fs::read_to_string(&plan.config_path).unwrap();
-        std::fs::write(
-            sup.service_dir(&web.id).join("conf").join("custom.conf"),
-            "this is not nginx syntax\n",
-        )
-        .unwrap();
+        let custom = sup.service_dir(&web.id).join("conf").join(
+            if matches!(web_pkg, "caddy" | "frankenphp") {
+                "custom.caddy"
+            } else {
+                "custom.conf"
+            },
+        );
+        std::fs::write(&custom, "this is not web server syntax {\n").unwrap();
         let (op, h) = sites
             .apply(SiteRequest {
                 site_id: Some(plan.site_id.clone()),
@@ -1458,11 +1810,7 @@ mod live {
             good_config
         );
         assert_eq!(sites.check_site(&plan.site_id).status, Some(200));
-        std::fs::write(
-            sup.service_dir(&web.id).join("conf").join("custom.conf"),
-            "",
-        )
-        .unwrap();
+        std::fs::write(&custom, "").unwrap();
 
         // Removal takes out the hosts entry and the config.
         let (op, h) = sites.remove(&plan.site_id).unwrap();

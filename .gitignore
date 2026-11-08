@@ -6,6 +6,8 @@ dist-ssr
 
 # Logs
 logs
+# …but not the Logs & Diagnostics page's source.
+!src/features/logs/
 *.log
 pnpm-debug.log*
 

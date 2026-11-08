@@ -1,6 +1,7 @@
 pub mod commands;
 pub mod domain;
 pub mod error;
+pub mod lifecycle;
 pub mod persistence;
 pub mod platform;
 pub mod security;
@@ -32,10 +33,15 @@ fn build_app<R: tauri::Runtime>(
             commands::runtimes::apply_runtime_switch,
             commands::runtimes::get_php_details,
             commands::runtimes::create_php_ini,
+            commands::config::get_config,
+            commands::config::preview_config_change,
+            commands::config::apply_config_change,
+            commands::config::read_config_backup,
             commands::projects::list_projects,
             commands::projects::create_project,
             commands::projects::remove_project,
             commands::projects::open_project_terminal,
+            commands::projects::open_project_folder,
             commands::projects::set_project_services,
             commands::projects::start_project_services,
             commands::services::list_services,
@@ -71,6 +77,9 @@ fn build_app<R: tauri::Runtime>(
             commands::databases::snapshot_database,
             commands::databases::preview_restore,
             commands::databases::restore_database,
+            commands::frankenphp::get_frankenphp_status,
+            commands::frankenphp::set_frankenphp_path,
+            commands::frankenphp::remove_frankenphp,
             commands::tunnels::get_ngrok_status,
             commands::tunnels::set_ngrok_path,
             commands::tunnels::set_ngrok_token,
@@ -109,7 +118,12 @@ fn build_app<R: tauri::Runtime>(
             commands::scheduler::delete_scheduled_job,
             commands::scheduler::list_scheduled_job_runs,
             commands::scheduler::get_scheduled_job_run_log,
+            commands::app::register_close_handler,
+            commands::app::hide_main_window,
+            commands::app::quit_app,
+            commands::app::quit_app_now,
         ])
+        .on_window_event(lifecycle::on_window_event)
         .build(context)?;
     let dir = match data_dir {
         Some(dir) => dir,
@@ -143,6 +157,7 @@ fn build_app<R: tauri::Runtime>(
         s.spawn_loop();
     }
     app.manage(state);
+    app.manage(lifecycle::Lifecycle::default());
     Ok(app)
 }
 
@@ -181,20 +196,16 @@ pub fn run() {
     if std::env::args().any(|a| a == platform::windows::autostart::AUTOSTART_ARG) {
         let _ = window.minimize();
     }
+    // The notification-area icon; without it, "keep running" would hide the window for good.
+    if let Err(e) = lifecycle::create_tray(app.handle()) {
+        eprintln!("Devluma: could not create the notification-area icon: {e}");
+    }
     app.run(|app, event| {
-        // ADR 0006 default: Devluma stops the services it owns when it exits.
-        // Tunnels always stop (their jobs would also end when Devluma's handles close).
+        // ADR 0006 default: Devluma stops the services it owns when it exits. A normal quit
+        // has already stopped them with progress on screen; this covers Windows shutdown,
+        // sign-out and a window closed before the UI loaded. Tunnels always stop.
         if let tauri::RunEvent::Exit = event {
-            let state = app.state::<state::AppState>();
-            if let Some(t) = &state.tunnels {
-                t.stop_all();
-            }
-            if let Some(s) = &state.scheduler {
-                s.stop_all();
-            }
-            if let Some(sup) = &state.supervisor {
-                sup.stop_all_blocking();
-            }
+            lifecycle::stop_everything(app);
         }
     });
 }
@@ -255,6 +266,10 @@ mod tests {
         let app = app(dir.path());
         for cmd in [
             "get_app_info",
+            "register_close_handler",
+            "hide_main_window",
+            "quit_app",
+            "quit_app_now",
             "get_startup_status",
             "list_operations",
             "cancel_operation",
@@ -264,10 +279,15 @@ mod tests {
             "apply_runtime_switch",
             "get_php_details",
             "create_php_ini",
+            "get_config",
+            "preview_config_change",
+            "apply_config_change",
+            "read_config_backup",
             "list_projects",
             "create_project",
             "remove_project",
             "open_project_terminal",
+            "open_project_folder",
             "set_project_services",
             "start_project_services",
             "list_services",
@@ -303,6 +323,9 @@ mod tests {
             "snapshot_database",
             "preview_restore",
             "restore_database",
+            "get_frankenphp_status",
+            "set_frankenphp_path",
+            "remove_frankenphp",
             "get_ngrok_status",
             "set_ngrok_path",
             "set_ngrok_token",

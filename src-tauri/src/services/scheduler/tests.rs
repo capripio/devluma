@@ -313,3 +313,117 @@ fn deleting_a_job_removes_its_history_and_logs() {
     assert!(!logs.exists());
     assert!(h.sched.list().unwrap().is_empty());
 }
+
+fn copy_tree(from: &Path, to: &Path) {
+    std::fs::create_dir_all(to).unwrap();
+    for entry in std::fs::read_dir(from).unwrap() {
+        let entry = entry.unwrap();
+        let target = to.join(entry.file_name());
+        if entry.file_type().unwrap().is_dir() {
+            copy_tree(&entry.path(), &target);
+        } else {
+            std::fs::copy(entry.path(), &target).unwrap();
+        }
+    }
+}
+
+/// `DEVLUMA_LARAVEL_PROJECT=<a Laravel app> cargo test live_laravel_schedule -- --ignored`:
+/// a real Laravel app's `artisan schedule:run` through the scheduler with real PHP from the
+/// catalog. Create the app once with `composer create-project laravel/laravel <dir>` and set
+/// `CACHE_STORE=file` in its `.env` (no migrations needed). The test works on a copy.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "uses the network, real PHP and a Laravel app"]
+async fn live_laravel_schedule() {
+    use crate::services::install::ProcessProbe;
+    use crate::services::supervisor::tests::LiveEnv;
+
+    let source = std::env::var_os("DEVLUMA_LARAVEL_PROJECT")
+        .map(PathBuf::from)
+        .expect("set DEVLUMA_LARAVEL_PROJECT to a Laravel app (composer create-project laravel/laravel)");
+    let env = LiveEnv::install(&[("php", "8.4.27-1")]).await;
+    let php = env.installation("php");
+    env.db
+        .write(|c| crate::persistence::installations::set_global_default(c, &php.id))
+        .unwrap();
+    // Laravel needs a few extensions: php.ini from the official template, then enabled.
+    let php_dir = PathBuf::from(&php.install_path);
+    crate::services::php::create_ini(
+        &ProcessProbe,
+        &php_dir,
+        crate::services::php::IniTemplate::Development,
+    )
+    .unwrap();
+    let ini = php_dir.join(crate::services::php::INI_FILE);
+    let mut text = std::fs::read_to_string(&ini).unwrap();
+    for ext in ["openssl", "mbstring", "fileinfo", "pdo_sqlite", "curl"] {
+        text = text.replace(&format!(";extension={ext}"), &format!("extension={ext}"));
+    }
+    std::fs::write(&ini, text).unwrap();
+
+    // The app, with a scheduled closure and a scheduled command, both every minute.
+    let app = env.paths.www.join("laravel");
+    copy_tree(&source, &app);
+    let marker = app.join("storage").join("devluma-scheduled.txt");
+    let _ = std::fs::remove_file(&marker);
+    let console = app.join("routes").join("console.php");
+    let mut routes = std::fs::read_to_string(&console).unwrap();
+    routes.push_str(
+        r"
+\Illuminate\Support\Facades\Schedule::call(function () {
+    file_put_contents(storage_path('devluma-scheduled.txt'), PHP_VERSION);
+})->everyMinute();
+\Illuminate\Support\Facades\Schedule::command('inspire')->everyMinute();
+",
+    );
+    std::fs::write(&console, routes).unwrap();
+    let project =
+        crate::services::projects::create(&env.db, &env.paths, "Laravel", "laravel", &[]).unwrap();
+    assert_eq!(project.project_type.as_deref(), Some("laravel"));
+
+    let sched = Scheduler::new(
+        Arc::clone(&env.db),
+        Arc::new(crate::services::catalog::load()),
+        env.paths.clone(),
+        Arc::new(RecordingSink::default()),
+    );
+    let req = JobRequest {
+        id: None,
+        project_id: project.id.clone(),
+        name: "Laravel scheduler".into(),
+        kind: JobKind::ArtisanSchedule,
+        program: None,
+        args: vec![],
+        cron: "* * * * *".into(),
+        timeout_secs: 120,
+        enabled: true,
+    };
+    let preview = sched.preview(&req).unwrap();
+    let job = sched.save(&req).unwrap();
+    let run = sched.run_now(&job.id).unwrap();
+    let deadline = Instant::now() + Duration::from_secs(120);
+    while sched.is_running(&job.id) {
+        assert!(Instant::now() < deadline, "schedule:run didn't finish");
+        std::thread::sleep(Duration::from_millis(200));
+    }
+    let done = sched
+        .runs(&job.id)
+        .unwrap()
+        .into_iter()
+        .find(|r| r.id == run.id)
+        .unwrap();
+    let log = sched.run_log(&job.id, &run.id).unwrap();
+    assert_eq!(
+        done.status,
+        RunStatus::Succeeded,
+        "{preview:?}\n{:?}\n{log}",
+        done.message
+    );
+    assert_eq!(done.exit_code, Some(0));
+    assert_eq!(
+        std::fs::read_to_string(&marker).unwrap(),
+        "8.4.27",
+        "the closure ran with the project's PHP"
+    );
+    assert!(log.contains("inspire"), "the command ran too:\n{log}");
+    sched.stop_all();
+}

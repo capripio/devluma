@@ -91,7 +91,14 @@ fn parse_modules(output: &str) -> (Vec<String>, Vec<String>) {
     let mut modules = Vec::new();
     let mut warnings = Vec::new();
     for line in output.lines().map(str::trim) {
-        if line.contains("PHP Startup:")
+        // php.ini syntax errors: "PHP:  syntax error, unexpected … in <file> on line 4".
+        // PHP still exits 0 and runs with the lines before the error (verified, 8.5).
+        if let Some(rest) = line.strip_prefix("PHP:") {
+            let message = rest.trim().to_owned();
+            if !warnings.contains(&message) {
+                warnings.push(message);
+            }
+        } else if line.contains("PHP Startup:")
             || line.starts_with("PHP Warning")
             || line.starts_with("Warning:")
         {
@@ -112,6 +119,18 @@ fn parse_modules(output: &str) -> (Vec<String>, Vec<String>) {
     modules.sort_by_key(|m| m.to_lowercase());
     modules.dedup();
     (modules, warnings)
+}
+
+/// Problems PHP reports when starting with `ini`: syntax errors and startup warnings
+/// (a missing extension, an invalid time zone or size).
+pub fn ini_problems(
+    probe: &dyn ExecutableProbe,
+    install: &Path,
+    ini: &Path,
+) -> Result<Vec<String>, String> {
+    let ini = ini.to_string_lossy();
+    let out = probe.run(&php_exe(install), &["-c", &ini, "-m"])?;
+    Ok(parse_modules(&out).1)
 }
 
 /// Template text with Devluma's required overrides applied.
@@ -243,6 +262,22 @@ mod tests {
         let (modules, warnings) = parse_modules(out);
         assert_eq!(modules, vec!["Core"]);
         assert_eq!(warnings.len(), 1, "{warnings:?}");
+    }
+
+    #[test]
+    fn ini_syntax_errors_and_invalid_values_are_problems() {
+        // Real php.exe 8.5.11 output for a broken php.ini (exit code 0).
+        let out = "PHP:  syntax error, unexpected end of file, expecting TC_DOLLAR_CURLY or TC_QUOTED_STRING or '\"' in C:\\x\\php.ini on line 4\n[PHP Modules]\nbcmath\nCore\n";
+        let (modules, warnings) = parse_modules(out);
+        assert_eq!(modules, vec!["bcmath", "Core"]);
+        assert_eq!(
+            warnings,
+            vec![
+                "syntax error, unexpected end of file, expecting TC_DOLLAR_CURLY or TC_QUOTED_STRING or '\"' in C:\\x\\php.ini on line 4"
+            ]
+        );
+        let out = "\nWarning: Invalid \"memory_limit\" setting. Invalid quantity \"12XYZ\": unknown multiplier \"Z\", interpreting as \"12\" for backwards compatibility in Unknown on line 0\n[PHP Modules]\nCore\n";
+        assert_eq!(parse_modules(out).1.len(), 1);
     }
 
     #[test]

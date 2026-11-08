@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { NavLink, Outlet, useLocation, useMatches } from "react-router";
 import logoUrl from "../assets/logo.png";
+import { CloseHandler } from "./CloseHandler";
 import { CommandSlotContext } from "./commandBar";
 import { NAV_GROUP_LABELS, NAV_ITEMS, type NavItem } from "./navigation";
 import { StatusBar } from "./StatusBar";
@@ -106,6 +107,7 @@ export function AppShell() {
         </div>
 
         <StatusBar />
+        <CloseHandler />
       </div>
     </CommandSlotContext.Provider>
   );

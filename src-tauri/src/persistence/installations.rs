@@ -187,6 +187,53 @@ pub fn mark_installed(
     get(conn, id)
 }
 
+/// A tool the user provides (ADR 0019): recorded as `installed` without a download or an
+/// integrity check (`integrity_result = 'user-provided'`). Updates `existing` in place, so
+/// services created from it keep working when the user picks another copy.
+pub fn register_user_provided(
+    conn: &Connection,
+    existing: Option<&str>,
+    package_version_id: &str,
+    install_path: &str,
+    metadata: &serde_json::Value,
+) -> DbResult<Installation> {
+    let ts = now();
+    let meta = serde_json::to_string(metadata)?;
+    let id = match existing {
+        Some(id) => {
+            conn.execute(
+                "UPDATE package_installations
+                 SET package_version_id = ?2, install_path = ?3, status = 'installed',
+                     integrity_result = 'user-provided', verified_at = ?4, installed_at = ?4,
+                     metadata_json = ?5
+                 WHERE id = ?1",
+                params![id, package_version_id, install_path, ts, meta],
+            )?;
+            id.to_owned()
+        }
+        None => {
+            let id = new_id();
+            conn.execute(
+                "INSERT INTO package_installations (id, package_version_id, install_path, status,
+                     integrity_result, verified_at, installed_at, metadata_json)
+                 VALUES (?1, ?2, ?3, 'installed', 'user-provided', ?4, ?4, ?5)",
+                params![id, package_version_id, install_path, ts, meta],
+            )?;
+            id
+        }
+    };
+    get(conn, &id)
+}
+
+/// Forgets a user-provided installation (its files belong to the user and stay).
+pub fn delete_user_provided(conn: &Connection, id: &str) -> DbResult<()> {
+    conn.execute(
+        "DELETE FROM package_installations WHERE id = ?1 AND integrity_result = 'user-provided'",
+        [id],
+    )?;
+    Ok(())
+}
+
 pub fn set_status(conn: &Connection, id: &str, status: InstallStatus) -> DbResult<()> {
     // A non-installed version can't remain the global default.
     let n = conn.execute(

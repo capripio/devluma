@@ -1,6 +1,6 @@
 [package]
 name = "devluma"
-version = "0.3.0"
+version = "0.4.0"
 description = "Windows-first local development environment manager"
 authors = ["Muhammad Asif"]
 license = "GPL-3.0-only"
@@ -20,7 +20,7 @@ tauri-build = { version = "2.7.2", features = [] }
 [dependencies]
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-tauri = { version = "2.12.3", features = [] }
+tauri = { version = "2.12.3", features = ["tray-icon"] }
 rusqlite = { version = "0.40.2", features = ["bundled"] }
 ulid = "3.0.0"
 thiserror = "2.0.21"

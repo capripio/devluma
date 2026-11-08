@@ -4,6 +4,7 @@ import { ErrorPanel } from "../../components/ErrorPanel";
 import { ipc } from "../../lib/ipc";
 import { toAppError, type AppError } from "../../lib/ipc/errors";
 import type { ServiceView } from "../../types/dto";
+import { adminPortInfo } from "./servicePackages";
 
 const input = "w-28 rounded-md border border-border bg-surface px-2 py-1.5 font-mono";
 
@@ -55,7 +56,7 @@ export function PortsForm({ service: s, disabled }: { service: ServiceView; disa
         </label>
         {s.adminPort !== null && (
           <label className="flex flex-col gap-1">
-            <span className="text-fg-muted">Web interface port</span>
+            <span className="text-fg-muted">{adminPortInfo(s.packageId).label}</span>
             <input
               type="number"
               min={1}

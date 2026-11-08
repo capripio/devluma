@@ -35,10 +35,11 @@ const catalog = catalogView([
     displayName: "Nginx",
     category: "web_server",
   }),
-  packageView("apache", [versionView("apache", "2.4.69")], {
+  packageView("apache", [versionView("apache", "2.4.70")], {
     displayName: "Apache httpd",
     category: "web_server",
   }),
+  packageView("caddy", [versionView("caddy", "2.11.9")], { displayName: "Caddy", category: "web_server" }),
   packageView("mariadb", [versionView("mariadb", "11.8.9", { sizeBytes: 97_016_251 })], {
     displayName: "MariaDB",
     category: "database",
@@ -94,8 +95,10 @@ describe("first-run setup", () => {
     // Web servers are pick-one.
     await userEvent.click(within(stack).getByLabelText("Apache httpd"));
     expect(within(stack).getByLabelText("Nginx")).not.toBeChecked();
-    await userEvent.click(within(stack).getByLabelText("Nginx"));
+    await userEvent.click(within(stack).getByLabelText("Caddy"));
     expect(within(stack).getByLabelText("Apache httpd")).not.toBeChecked();
+    await userEvent.click(within(stack).getByLabelText("Nginx"));
+    expect(within(stack).getByLabelText("Caddy")).not.toBeChecked();
     expect(stack).toHaveTextContent("Download:");
     await userEvent.click(within(stack).getByRole("button", { name: "Review" }));
 

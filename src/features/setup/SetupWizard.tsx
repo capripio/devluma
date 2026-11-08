@@ -14,7 +14,7 @@ type Step = "welcome" | "storage" | "stack" | "review" | "running";
 /** Packages the wizard offers, grouped as the user thinks about them. */
 const GROUPS: { title: string; ids: string[]; pickOne?: boolean }[] = [
   { title: "Language runtimes", ids: ["php", "node", "python"] },
-  { title: "Web server", ids: ["nginx", "apache"], pickOne: true },
+  { title: "Web server", ids: ["nginx", "apache", "caddy"], pickOne: true },
   { title: "Database", ids: ["mariadb", "postgresql", "mongodb"] },
   { title: "Tools", ids: ["mailpit"] },
 ];
@@ -31,7 +31,7 @@ const PRESETS: { id: string; label: string; description: string; packages: strin
   { id: "custom", label: "Choose myself", description: "Pick exactly what to download.", packages: [] },
 ];
 
-const SERVICE_PACKAGES = new Set(["nginx", "apache", "mariadb", "postgresql", "mongodb", "mailpit"]);
+const SERVICE_PACKAGES = new Set(["nginx", "apache", "caddy", "mariadb", "postgresql", "mongodb", "mailpit"]);
 
 /** Default version: the newest the catalog lists that can be installed on this PC. */
 function defaultVersion(p: PackageView): string | undefined {

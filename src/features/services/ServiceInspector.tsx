@@ -4,6 +4,7 @@ import { CopyButton } from "../../components/CopyButton";
 import { OperationStatusBadge, ServiceStatusBadge } from "../../components/StatusBadge";
 import type { ServiceView } from "../../types/dto";
 import { ServiceActions } from "./ServiceActions";
+import { adminPortInfo } from "./servicePackages";
 
 const ROLE_LABELS: Record<NonNullable<ServiceView["role"]>, string> = {
   web_server: "Web server",
@@ -67,7 +68,12 @@ export function ServiceInspector({ service: s, children }: { service: ServiceVie
         <dt className="text-fg-muted">Port</dt>
         <dd className="font-mono">
           {s.port ?? "—"}
-          {s.adminPort !== null && <span className="text-fg-muted"> · UI {s.adminPort}</span>}
+          {s.adminPort !== null && (
+            <span className="text-fg-muted">
+              {" "}
+              · {adminPortInfo(s.packageId).short} {s.adminPort}
+            </span>
+          )}
         </dd>
         <dt className="text-fg-muted">Process</dt>
         <dd className="font-mono">{s.pid ? `PID ${s.pid}` : "Not running"}</dd>

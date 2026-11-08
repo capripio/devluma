@@ -29,6 +29,11 @@ pub fn set<T: Serialize>(conn: &Connection, key: &str, value: &T) -> DbResult<()
     Ok(())
 }
 
+pub fn delete(conn: &Connection, key: &str) -> DbResult<()> {
+    conn.execute("DELETE FROM settings WHERE key = ?1", [key])?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

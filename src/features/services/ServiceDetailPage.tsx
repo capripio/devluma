@@ -15,6 +15,7 @@ import type { ServiceView } from "../../types/dto";
 import { ServiceActions } from "./ServiceActions";
 import { explainService } from "./ServiceInspector";
 import { useServices } from "./useServices";
+import { ConfigPanel } from "../config/ConfigPanel";
 import { LoadingState } from "../../components/LoadingState";
 
 /** Right-hand pane of the Services page for one service (the route stays deep-linkable). */
@@ -93,7 +94,20 @@ function ServiceTabs({ service: s }: { service: ServiceView }) {
         <Overview service={s} />
       </Tabs.Content>
       <Tabs.Content value="config">
-        <Configuration serviceId={s.id} />
+        {s.role === "fast_cgi" ? (
+          <p className="text-sm text-fg-muted">
+            This PHP backend uses its PHP version&apos;s php.ini. Change it on the{" "}
+            <Link
+              to={`/runtimes/php/installations/${s.packageInstallationId}`}
+              className="text-accent hover:underline"
+            >
+              PHP {s.version} page
+            </Link>
+            , then restart the backend.
+          </p>
+        ) : (
+          <ConfigPanel target={{ kind: "service", serviceId: s.id }} />
+        )}
       </Tabs.Content>
       <Tabs.Content value="logs">
         <Logs serviceId={s.id} />
@@ -185,29 +199,6 @@ function Overview({ service: s }: { service: ServiceView }) {
             navigate("/services");
           }}
         />
-      )}
-    </div>
-  );
-}
-
-function Configuration({ serviceId }: { serviceId: string }) {
-  const details = useAsync(() => ipc.getServiceDetails(serviceId));
-  if (details.status === "pending")
-    return <LoadingState label="Loading configuration…" shape="panel" rows={6} />;
-  if (details.status === "error") return <ErrorPanel error={details.error} onRetry={details.reload} />;
-  const d = details.data;
-  return (
-    <div className="flex flex-col gap-2 text-sm">
-      <p className="flex items-center gap-1 font-mono text-xs break-all text-fg-muted">
-        {d.configPath}
-        <CopyButton value={d.configPath} label="configuration path" />
-      </p>
-      {d.configText === null ? (
-        <p className="text-fg-muted">The configuration file hasn&apos;t been created yet.</p>
-      ) : (
-        <pre className="max-h-96 overflow-auto rounded-md bg-surface-sunken p-3 font-mono text-xs">
-          {d.configText}
-        </pre>
       )}
     </div>
   );

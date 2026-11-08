@@ -17,6 +17,11 @@ pub enum AdapterId {
     Postgresql,
     Mongodb,
     Apache,
+    /// Caddy web server (ADR 0019).
+    Caddy,
+    /// FrankenPHP: Caddy with PHP built in. Never downloaded: the user's own
+    /// frankenphp.exe is registered (ADR 0019, `services::frankenphp`).
+    Frankenphp,
     /// Cmder console (a terminal, not a runtime or service; ADR 0015).
     Cmder,
     /// Deterministic test package; never accepted outside `cfg(test)`.
@@ -55,6 +60,8 @@ impl AdapterId {
             "postgresql" => Some(Self::Postgresql),
             "mongodb" => Some(Self::Mongodb),
             "apache" => Some(Self::Apache),
+            "caddy" => Some(Self::Caddy),
+            "frankenphp" => Some(Self::Frankenphp),
             "cmder" => Some(Self::Cmder),
             #[cfg(test)]
             "fixture" => Some(Self::Fixture),
@@ -73,6 +80,8 @@ impl AdapterId {
             Self::Postgresql => "postgresql",
             Self::Mongodb => "mongodb",
             Self::Apache => "apache",
+            Self::Caddy => "caddy",
+            Self::Frankenphp => "frankenphp",
             Self::Cmder => "cmder",
             #[cfg(test)]
             Self::Fixture => "fixture",
@@ -126,6 +135,17 @@ impl AdapterId {
                 args: &["-v"],
                 pattern: r"^Server version: Apache/(\d+\.\d+\.\d+) ",
             },
+            // "v2.11.9 h1:bhZt…=": the caddy module's version and sum from the build info
+            // (read at review with `go version -m caddy.exe`).
+            Self::Caddy => VersionProbe {
+                args: &["version"],
+                pattern: r"^v(\d+\.\d+\.\d+) h1:",
+            },
+            // "FrankenPHP 1.13.5 PHP 8.5.12 Caddy v2.11.9 h1:…" (verified with v1.13.5).
+            Self::Frankenphp => VersionProbe {
+                args: &["version"],
+                pattern: r"^FrankenPHP v?(\d+\.\d+\.\d+) PHP ",
+            },
             // Cmder.exe is a GUI launcher: never run it to probe. Its version resource is
             // read instead (see `reads_version_resource`), e.g. "FileVersion 1.3.25.328".
             Self::Cmder => VersionProbe {
@@ -142,7 +162,9 @@ impl AdapterId {
 
     pub fn service_role(self) -> Option<ServiceRole> {
         match self {
-            Self::Nginx | Self::Apache => Some(ServiceRole::WebServer),
+            Self::Nginx | Self::Apache | Self::Caddy | Self::Frankenphp => {
+                Some(ServiceRole::WebServer)
+            }
             Self::Mariadb => Some(ServiceRole::Database),
             Self::Php => Some(ServiceRole::FastCgi),
             Self::Mailpit => Some(ServiceRole::Mail),
@@ -158,12 +180,15 @@ impl AdapterId {
     pub fn required_system_dlls(self) -> &'static [(&'static str, &'static str)] {
         const VC_REDIST: &str = "Microsoft Visual C++ 2015–2022 Redistributable (x64)";
         match self {
-            Self::Php | Self::Apache => &[
+            // FrankenPHP's Windows build bundles the official (VS17) PHP.
+            Self::Php | Self::Apache | Self::Frankenphp => &[
                 ("vcruntime140.dll", VC_REDIST),
                 ("vcruntime140_1.dll", VC_REDIST),
             ],
-            // Python's package ships its own vcruntime DLLs; Node.js needs none.
+            // Python's package ships its own vcruntime DLLs; Node.js and Caddy (Go, built
+            // with CGO_ENABLED=0) need none.
             Self::Nginx
+            | Self::Caddy
             | Self::Mariadb
             | Self::Node
             | Self::Python
@@ -187,6 +212,12 @@ impl AdapterId {
             Self::Cmder => &[],
             _ => &[""],
         }
+    }
+
+    /// Tools Devluma never downloads: the user's own copy is registered instead, and the
+    /// catalog may not offer them (ADR 0019).
+    pub fn user_provided(self) -> bool {
+        matches!(self, Self::Frankenphp)
     }
 
     /// True when the version comes from the executable's version resource rather than its
@@ -276,5 +307,29 @@ mod tests {
             Some("3.14.8")
         );
         assert_eq!(AdapterId::Python.parse_version("Python 3.15.0rc1\n"), None);
+    }
+
+    #[test]
+    fn caddy_version_parsing() {
+        let out = "v2.11.9 h1:bhZtcRKQOq0fuLvEgCdPYvUxXyGn9kzjG4lh2332DTE=\r\n";
+        assert_eq!(
+            AdapterId::Caddy.parse_version(out).as_deref(),
+            Some("2.11.9")
+        );
+        assert_eq!(
+            AdapterId::Caddy.parse_version("v2.12.0-beta.1 h1:x=\n"),
+            None
+        );
+        assert_eq!(AdapterId::parse("caddy"), Some(AdapterId::Caddy));
+        let franken = "FrankenPHP 1.13.5 PHP 8.5.12 Caddy v2.11.9 h1:bhZtcRKQOq0fuLvEgCdPYvUxXyGn9kzjG4lh2332DTE=\r\n";
+        assert_eq!(
+            AdapterId::Frankenphp.parse_version(franken).as_deref(),
+            Some("1.13.5")
+        );
+        assert!(AdapterId::Frankenphp.user_provided() && !AdapterId::Caddy.user_provided());
+        assert_eq!(
+            AdapterId::Caddy.service_role(),
+            Some(ServiceRole::WebServer)
+        );
     }
 }

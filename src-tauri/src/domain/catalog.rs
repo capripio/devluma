@@ -115,6 +115,10 @@ pub struct VersionManifest {
     pub release_date: Option<String>,
     #[serde(default)]
     pub end_of_life_date: Option<String>,
+    /// A newer release of the same line that replaces this one (e.g. a security patch). Kept in
+    /// the catalog so existing installs stay visible and switchable; new installs are refused.
+    #[serde(default)]
+    pub superseded_by: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -303,6 +307,13 @@ fn validate(doc: CatalogDocument, opts: ValidationOptions) -> Catalog {
             )));
             continue;
         };
+        if adapter.user_provided() {
+            issues.push(issue(format!(
+                "\"{}\" is only used from a program the user provides (ADR 0019); package unavailable.",
+                pkg.adapter
+            )));
+            continue;
+        }
         if pkg.display_name.trim().is_empty()
             || pkg.publisher.trim().is_empty()
             || pkg.license.id.trim().is_empty()
@@ -368,6 +379,31 @@ fn validate(doc: CatalogDocument, opts: ValidationOptions) -> Catalog {
             });
             false
         });
+    }
+    // A replacement must be another accepted version of the same package and architecture
+    // that isn't replaced itself. A bad reference is reported and ignored, never guessed.
+    for pkg in &mut accepted {
+        let available: HashSet<(String, Architecture)> = pkg
+            .versions
+            .iter()
+            .filter(|v| v.superseded_by.is_none())
+            .map(|v| (v.version.clone(), v.architecture))
+            .collect();
+        for v in &mut pkg.versions {
+            let Some(target) = &v.superseded_by else {
+                continue;
+            };
+            if *target == v.version || !available.contains(&(target.clone(), v.architecture)) {
+                issues.push(CatalogIssue {
+                    package_id: Some(pkg.manifest.id.clone()),
+                    version: Some(v.version.clone()),
+                    message: format!(
+                        "supersededBy \"{target}\" must be another, current version of this package."
+                    ),
+                });
+                v.superseded_by = None;
+            }
+        }
     }
     for cyclic in dependency_cycles(&accepted) {
         issues.push(CatalogIssue {
@@ -589,6 +625,16 @@ mod tests {
         assert!(only_issue(&c).contains("Unknown adapter"));
     }
 
+    /// FrankenPHP's release asset changes daily, so the catalog may never offer it (ADR 0019).
+    #[test]
+    fn user_provided_tools_cant_come_from_the_catalog() {
+        let mut p = package("frankenphp", vec![version("1.13.5")]);
+        p["adapter"] = json!("frankenphp");
+        let c = parse(document(vec![p]));
+        assert!(c.packages.is_empty());
+        assert!(only_issue(&c).contains("only used from a program the user provides"));
+    }
+
     #[test]
     fn bad_versions_are_rejected_individually() {
         let mut http = version("1.0.1");
@@ -671,6 +717,43 @@ mod tests {
             "c's only version has a missing dependency"
         );
         assert_eq!(cat.issues.len(), 3);
+    }
+
+    #[test]
+    fn superseded_versions_stay_listed_and_must_point_at_a_current_version() {
+        let replaced = |v: &str, by: &str| {
+            let mut x = version(v);
+            x["supersededBy"] = json!(by);
+            x
+        };
+        let c = parse(document(vec![package(
+            "tool",
+            vec![
+                version("1.0.2"),
+                replaced("1.0.1", "1.0.2"),
+                // Invalid: unknown target, itself, and a target that is replaced too.
+                replaced("1.0.0", "9.9.9"),
+                replaced("0.9.0", "0.9.0"),
+                replaced("0.8.0", "1.0.1"),
+            ],
+        )]));
+        let versions = &c.packages[0].versions;
+        assert_eq!(
+            versions.len(),
+            5,
+            "replaced versions stay, so installs stay visible"
+        );
+        let by = |v: &str| {
+            versions
+                .iter()
+                .find(|x| x.version == v)
+                .unwrap()
+                .superseded_by
+                .clone()
+        };
+        assert_eq!(by("1.0.1").as_deref(), Some("1.0.2"));
+        assert_eq!((by("1.0.0"), by("0.9.0"), by("0.8.0")), (None, None, None));
+        assert_eq!(c.issues.len(), 3, "{:?}", c.issues);
     }
 
     #[test]

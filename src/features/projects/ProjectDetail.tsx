@@ -1,4 +1,4 @@
-import { ExternalLink, ListChecks, Plus, Trash2 } from "lucide-react";
+import { ExternalLink, FolderOpen, ListChecks, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Commands } from "../../app/commandBar";
@@ -55,6 +55,12 @@ export function ProjectDetail({
       () => ipc.openProjectTerminal(p.id),
       (r) => ({ message: terminalOpenedMessage(r) }),
     );
+  const openFolder = () =>
+    report(
+      "Opening…",
+      () => ipc.openProjectFolder(p.id),
+      () => ({ message: `Opened ${p.rootPath} in File Explorer.` }),
+    );
   const openSite = (s: SiteView) =>
     report(
       "Opening…",
@@ -80,6 +86,10 @@ export function ProjectDetail({
             Open website
           </Button>
         )}
+        <Button onClick={openFolder} aria-label={`Open folder of ${p.name}`}>
+          <FolderOpen aria-hidden className="size-4" />
+          Open folder
+        </Button>
         <Button onClick={openTerminal} aria-label={`Open terminal for ${p.name}`}>
           Open terminal
         </Button>

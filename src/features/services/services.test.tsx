@@ -223,6 +223,8 @@ describe("services list", () => {
           defaultPorts: {
             nginx: 8080,
             apache: 8081,
+            caddy: 8082,
+            caddyAdmin: 2020,
             mariadb: 3310,
             postgresql: 5432,
             mongodb: 27017,
@@ -300,6 +302,30 @@ describe("services list", () => {
     });
   });
 
+  it("describes Caddy's second port as its admin API, never as a page to open", async () => {
+    const caddy = service({
+      id: "c1",
+      instanceName: "caddy",
+      serviceType: "web_server",
+      lifecycleAdapter: "caddy",
+      observedState: "running",
+      port: 8082,
+      adminPort: 2019,
+      role: "web_server",
+      packageId: "caddy",
+      packageName: "Caddy",
+      version: "2.11.9",
+      portConflicts: [],
+    });
+    const { container } = await renderApp(
+      "/services/c1",
+      createMockAdapter({ ...defaultHandlers, list_services: () => [caddy] }),
+    );
+    expect(await screen.findByLabelText("Admin API port")).toHaveValue(2019);
+    expect(screen.queryByRole("button", { name: /web interface/ })).not.toBeInTheDocument();
+    expect(await axeViolations(container)).toEqual([]);
+  });
+
   it("keeps the form open with the reason when data already exists", async () => {
     await renderApp(
       "/services",
@@ -344,6 +370,27 @@ describe("service detail", () => {
         ...defaultHandlers,
         list_services: () => [service()],
         get_service_details: () => details,
+        get_config: () => ({
+          settings: [],
+          settingsFile: null,
+          settingsUnavailable: null,
+          applies: "reload",
+          extensions: null,
+          files: [
+            {
+              key: "main",
+              label: "nginx.conf",
+              path: details.configPath,
+              editable: false,
+              readOnlyReason: null,
+              language: "nginx",
+              note: "Devluma writes this file before every start.",
+              text: details.configText,
+              hash: "h",
+              backups: [],
+            },
+          ],
+        }),
       }),
     );
     expect(await screen.findByRole("heading", { level: 1, name: "web" })).toBeInTheDocument();
@@ -351,7 +398,8 @@ describe("service detail", () => {
     expect(await axeViolations(container)).toEqual([]);
 
     await userEvent.click(screen.getByRole("tab", { name: "Configuration" }));
-    expect(await screen.findByText(/listen 127\.0\.0\.1:8080;/)).toBeInTheDocument();
+    // No simple settings: the panel opens on the files, read-only for generated ones.
+    expect(await screen.findByLabelText("nginx.conf (read-only)")).toHaveValue(details.configText);
 
     await userEvent.click(screen.getByRole("tab", { name: "Logs" }));
     expect(await screen.findByText(/password=\[REDACTED\]/)).toBeInTheDocument();

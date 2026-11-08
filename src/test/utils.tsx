@@ -73,6 +73,15 @@ export const defaultHandlers: Record<string, (args?: Record<string, unknown>) =>
   list_sites: () => [],
   list_certificates: () => [],
   list_tunnels: () => [],
+  get_frankenphp_status: () => ({
+    path: null,
+    version: null,
+    phpVersion: null,
+    installationId: null,
+    problem: null,
+    services: [],
+    detected: [],
+  }),
   list_database_services: () => [],
   list_database_backups: () => [],
   get_setup_status: () => ({
@@ -135,6 +144,7 @@ export function versionView(pkg: string, version: string, overrides: Record<stri
     conflicts: [],
     releaseDate: "2026-09-01",
     endOfLifeDate: null,
+    supersededBy: null,
     installPath: [
       "C:",
       "Users",
@@ -212,6 +222,8 @@ export function preferencesView(
       defaultPorts: {
         nginx: 80,
         apache: 80,
+        caddy: 80,
+        caddyAdmin: 2019,
         mariadb: 3306,
         postgresql: 5432,
         mongodb: 27017,
@@ -220,6 +232,7 @@ export function preferencesView(
       },
       startServices: [],
       downloadTimeouts: { connectSecs: 15, idleSecs: 30 },
+      closeAction: "ask",
       ...preferences,
     },
     suggestedSuffixes: ["test", "localhost", "internal", "local"],

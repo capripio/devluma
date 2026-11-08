@@ -11,6 +11,7 @@ use crate::domain::catalog::Catalog;
 use crate::error::{ErrorCode, IpcError};
 use crate::persistence::{Database, DbError};
 use crate::services::certificates::CertificateService;
+use crate::services::config::ConfigService;
 use crate::services::databases::DatabaseService;
 use crate::services::diagnostics::{AppFacts, Diagnostics};
 use crate::services::download::DownloadOptions;
@@ -130,6 +131,7 @@ pub struct AppState {
     pub databases: Option<Arc<DatabaseService>>,
     pub diagnostics: Option<Arc<Diagnostics>>,
     pub updates: Option<Arc<UpdateService>>,
+    pub config: Option<Arc<ConfigService>>,
     sink: Arc<dyn ProgressSink>,
     db: Option<Arc<Database>>,
 }
@@ -173,6 +175,11 @@ impl AppState {
     pub fn scheduler(&self) -> Result<Arc<Scheduler>, IpcError> {
         self.db()?;
         self.scheduler.clone().ok_or_else(IpcError::internal)
+    }
+
+    pub fn config(&self) -> Result<Arc<ConfigService>, IpcError> {
+        self.db()?;
+        self.config.clone().ok_or_else(IpcError::internal)
     }
 
     pub fn sites(&self) -> Result<Arc<SiteService>, IpcError> {
@@ -305,6 +312,15 @@ pub fn initialize(
             )),
             _ => None,
         };
+        let config = match (&db, &supervisor) {
+            (Some(db), Some(sup)) => Some(ConfigService::new(
+                Arc::clone(db),
+                Arc::clone(sup),
+                Arc::new(ProcessProbe),
+                Arc::clone(&sink),
+            )),
+            _ => None,
+        };
         let diagnostics = db.as_ref().map(|db| {
             Diagnostics::new(
                 Arc::clone(db),
@@ -337,6 +353,7 @@ pub fn initialize(
             databases,
             diagnostics,
             updates,
+            config,
             sink: Arc::clone(&sink),
             db,
         }

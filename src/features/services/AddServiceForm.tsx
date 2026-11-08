@@ -21,6 +21,8 @@ interface Choice {
 /** Creates a service from an installed web server, database or mail catcher. */
 export function AddServiceForm({ onDone }: { onDone: () => void }) {
   const catalog = useAsync(ipc.listPackages);
+  // The user's own FrankenPHP (ADR 0019) isn't a catalog package; offered when it's usable.
+  const franken = useAsync(ipc.getFrankenphpStatus);
   // Default ports from Settings; the built-in defaults apply if they can't be loaded.
   const prefs = useAsync(ipc.getPreferences);
   const choices: Choice[] =
@@ -36,6 +38,18 @@ export function AddServiceForm({ onDone }: { onDone: () => void }) {
                 category: p.category,
                 packageId: p.id,
               })),
+          )
+          .concat(
+            franken.status === "success" && franken.data.installationId && !franken.data.problem
+              ? [
+                  {
+                    installationId: franken.data.installationId,
+                    label: `FrankenPHP ${franken.data.version ?? ""} (your own copy)`.replace("  ", " "),
+                    category: "web_server",
+                    packageId: "frankenphp",
+                  },
+                ]
+              : [],
           )
       : [];
 

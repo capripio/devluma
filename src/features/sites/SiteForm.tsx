@@ -9,6 +9,7 @@ import { toAppError, type AppError } from "../../lib/ipc/errors";
 import { useAsync } from "../../lib/useAsync";
 import type { ProjectView, SitePlan, SiteRequest, SiteView } from "../../types/dto";
 import { LoadingState } from "../../components/LoadingState";
+import { LocalCaNotice } from "../certificates/LocalCaNotice";
 
 const PHP_KINDS = new Set(["laravel", "symfony", "wordpress", "php"]);
 
@@ -53,7 +54,8 @@ export function SiteForm({ existing, initialProjectId, initialDomain, onDone }: 
   }
   if (data.status === "error") return <ErrorPanel error={data.error} onRetry={data.reload} />;
   const [projects, services, suffix] = data.data;
-  const webServers = services.filter((s) => s.lifecycleAdapter === "nginx");
+  // Every web server Devluma can write site configs for (Nginx, Apache, Caddy).
+  const webServers = services.filter((s) => s.role === "web_server");
   if (projects.length === 0 || webServers.length === 0) {
     return (
       <div className="flex flex-col items-start gap-2 rounded-md border border-border p-4 text-sm">
@@ -68,7 +70,7 @@ export function SiteForm({ existing, initialProjectId, initialDomain, onDone }: 
         )}
         {webServers.length === 0 && (
           <p>
-            Create an Nginx service first on the{" "}
+            Create a web server service (Nginx, Apache or Caddy) first on the{" "}
             <Link to="/services" className="text-accent hover:underline">
               Services
             </Link>{" "}
@@ -102,7 +104,13 @@ function Form({
   onDone,
 }: {
   projects: ProjectView[];
-  webServers: { id: string; instanceName: string; port: number | null }[];
+  webServers: {
+    id: string;
+    instanceName: string;
+    packageId: string;
+    packageName: string;
+    port: number | null;
+  }[];
   suffix: string;
   existing?: SiteView;
   initialProjectId?: string;
@@ -231,7 +239,7 @@ function Form({
           <select value={webId} onChange={(e) => edit(setWebId)(e.target.value)} className={input}>
             {webServers.map((w) => (
               <option key={w.id} value={w.id}>
-                {w.instanceName} (port {w.port})
+                {w.instanceName} — {w.packageName} (port {w.port})
               </option>
             ))}
           </select>
@@ -248,7 +256,9 @@ function Form({
       </label>
       <label className="flex items-center gap-2">
         <input type="checkbox" checked={usePhp} onChange={(e) => edit(setUsePhp)(e.target.checked)} />
-        Serve PHP with this project&apos;s PHP version
+        {webServers.find((w) => w.id === webId)?.packageId === "frankenphp"
+          ? "Serve PHP with FrankenPHP's built-in PHP"
+          : "Serve PHP with this project's PHP version"}
       </label>
       <label className="flex items-center gap-2">
         <input
@@ -262,6 +272,7 @@ function Form({
         <input type="checkbox" checked={https} onChange={(e) => edit(setHttps)(e.target.checked)} />
         Also serve over HTTPS with a local development certificate
       </label>
+      {https && <LocalCaNotice domain={domain} />}
 
       {error && <ErrorPanel error={error} />}
 
@@ -273,7 +284,8 @@ function Form({
             {plan.php && (
               <>
                 {" "}
-                · PHP {plan.php.version} (FastCGI on 127.0.0.1:{plan.php.port})
+                · PHP {plan.php.version}{" "}
+                {plan.php.embedded ? "(built into FrankenPHP)" : `(FastCGI on 127.0.0.1:${plan.php.port})`}
               </>
             )}
           </p>
@@ -287,7 +299,10 @@ function Form({
               </p>
               {!plan.https.caTrusted && (
                 <p className="text-warning">
-                  Browsers will show a warning until you trust Devluma&apos;s local CA on the SSL Certificates
+                  Browsers will show a warning until you trust Devluma&apos;s local CA on the{" "}
+                  <Link to="/ssl" className="font-medium text-accent hover:underline">
+                    SSL Certificates
+                  </Link>{" "}
                   page. Applying this site doesn&apos;t trust anything.
                 </p>
               )}

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-frankenphp-status"
+description = "Enables the get_frankenphp_status command without any pre-configured scope."
+commands.allow = ["get_frankenphp_status"]
+
+[[permission]]
+identifier = "deny-get-frankenphp-status"
+description = "Denies the get_frankenphp_status command without any pre-configured scope."
+commands.deny = ["get_frankenphp_status"]

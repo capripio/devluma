@@ -9,6 +9,7 @@ import { PageHeader } from "../../components/PageHeader";
 import { ipc } from "../../lib/ipc";
 import { useAsync } from "../../lib/useAsync";
 import type { PhpDetails } from "../../types/dto";
+import { ConfigPanel } from "../config/ConfigPanel";
 
 type Template = "development" | "production";
 
@@ -31,7 +32,7 @@ export function PhpInstallationPage() {
       </Link>
       <PageHeader
         title="PHP installation"
-        description="Configuration and extensions for this installed version."
+        description="Settings, php.ini and extensions for this installed version."
       />
       {loaded.status === "pending" && !current && (
         <p role="status" className="text-sm text-fg-muted">
@@ -67,6 +68,10 @@ function Details({
 }) {
   const [creating, setCreating] = useState<Template | null>(null);
   const loaded = new Set(d.loadedModules.map((m) => m.toLowerCase()));
+  // After a save, show what PHP itself now reports (modules, startup warnings).
+  const onChanged = () => {
+    ipc.getPhpDetails(installationId).then(onUpdated, () => undefined);
+  };
 
   return (
     <>
@@ -98,10 +103,7 @@ function Details({
           php.ini
         </h2>
         {d.iniExists ? (
-          <p className="text-fg-muted">
-            This version uses the php.ini above. Edit it in your editor; managed extension toggles arrive in a
-            later update.
-          </p>
+          <ConfigPanel target={{ kind: "php", installationId }} onApplied={onChanged} />
         ) : (
           <>
             <p className="text-fg-muted">
@@ -128,8 +130,9 @@ function Details({
         </h2>
         <p className="text-fg-muted">
           {d.loadedModules.length} modules loaded · {d.availableExtensions.length} extension DLLs available
+          {d.iniExists && ", as PHP reports them. Turn extensions on or off in the php.ini settings above."}
         </p>
-        <ul className="grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-1">
+        <ul hidden={d.iniExists} className="grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-1">
           {d.availableExtensions.map((e) => (
             <li key={e} className="flex items-center gap-2 font-mono text-xs">
               <span

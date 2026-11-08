@@ -87,6 +87,7 @@ function site(id: string, projectId: string, domain: string, web: string, php: s
     url: `http://${domain}`,
     httpsUrl: null,
     phpVersion: php ? "8.3.14" : null,
+    embeddedPhp: null,
     phpOutdated: false,
     configPresent: true,
   };

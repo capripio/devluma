@@ -17,6 +17,7 @@ const TERMINAL: &str = "terminal.program";
 const DEFAULT_PORTS: &str = "services.default_ports";
 const START_SERVICES: &str = "startup.start_services";
 const DOWNLOAD_TIMEOUTS: &str = "downloads.timeouts";
+const CLOSE_ACTION: &str = "window.close_action";
 
 /// Suffixes suggested in Settings. Any valid suffix can be entered; these are reserved for
 /// local use and the local CA can sign them.
@@ -89,12 +90,16 @@ pub enum TerminalProgram {
     Cmder,
 }
 
-/// Ports pre-filled for new services (Add service and the setup wizard).
+/// Ports pre-filled for new services (Add service and the setup wizard). `serde(default)`:
+/// a group saved by an older build (without newer fields) keeps its values.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct DefaultPorts {
     pub nginx: u16,
     pub apache: u16,
+    pub caddy: u16,
+    /// Caddy's admin API (ADR 0019).
+    pub caddy_admin: u16,
     pub mariadb: u16,
     pub postgresql: u16,
     pub mongodb: u16,
@@ -107,6 +112,8 @@ impl Default for DefaultPorts {
         Self {
             nginx: 80,
             apache: 80,
+            caddy: 80,
+            caddy_admin: crate::services::supervisor::behavior::CADDY_ADMIN_PORT,
             mariadb: 3306,
             postgresql: 5432,
             mongodb: 27017,
@@ -122,6 +129,7 @@ impl DefaultPorts {
         Some(match adapter {
             AdapterId::Nginx => (self.nginx, None),
             AdapterId::Apache => (self.apache, None),
+            AdapterId::Caddy => (self.caddy, Some(self.caddy_admin)),
             AdapterId::Mariadb => (self.mariadb, None),
             AdapterId::Postgresql => (self.postgresql, None),
             AdapterId::Mongodb => (self.mongodb, None),
@@ -149,6 +157,19 @@ impl Default for DownloadTimeouts {
     }
 }
 
+/// What closing the main window does.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CloseAction {
+    /// Ask each time (until the user ticks "Remember my choice").
+    #[default]
+    Ask,
+    /// Hide to the notification area; services keep running.
+    Tray,
+    /// Stop every service Devluma runs, showing progress, then quit.
+    Quit,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Preferences {
@@ -161,6 +182,7 @@ pub struct Preferences {
     /// Service ids started when Devluma opens.
     pub start_services: Vec<String>,
     pub download_timeouts: DownloadTimeouts,
+    pub close_action: CloseAction,
 }
 
 impl Default for Preferences {
@@ -172,6 +194,7 @@ impl Default for Preferences {
             default_ports: DefaultPorts::default(),
             start_services: Vec::new(),
             download_timeouts: DownloadTimeouts::default(),
+            close_action: CloseAction::default(),
         }
     }
 }
@@ -196,6 +219,7 @@ pub fn load(c: &Connection) -> DbResult<Preferences> {
         default_ports: get_or_none(c, DEFAULT_PORTS)?.unwrap_or(d.default_ports),
         start_services: get_or_none(c, START_SERVICES)?.unwrap_or(d.start_services),
         download_timeouts: get_or_none(c, DOWNLOAD_TIMEOUTS)?.unwrap_or(d.download_timeouts),
+        close_action: get_or_none(c, CLOSE_ACTION)?.unwrap_or(d.close_action),
     };
     // Each group falls back on its own if it's out of range.
     let defaults = Preferences::default();
@@ -221,6 +245,8 @@ fn validate_ports(p: &Preferences) -> Result<(), String> {
     let all = [
         ("Nginx", d.nginx),
         ("Apache", d.apache),
+        ("Caddy", d.caddy),
+        ("Caddy admin API", d.caddy_admin),
         ("MariaDB", d.mariadb),
         ("PostgreSQL", d.postgresql),
         ("MongoDB", d.mongodb),
@@ -232,6 +258,9 @@ fn validate_ports(p: &Preferences) -> Result<(), String> {
     }
     if d.mailpit == d.mailpit_web {
         return Err("Mailpit's SMTP and web interface ports must be different.".into());
+    }
+    if d.caddy == d.caddy_admin {
+        return Err("Caddy's web and admin API ports must be different.".into());
     }
     if p.https_port == Some(0) {
         return Err("Choose an HTTPS port between 1 and 65535, or Automatic.".into());
@@ -269,7 +298,8 @@ pub fn save(c: &Connection, p: &Preferences) -> DbResult<()> {
     settings::set(c, TERMINAL, &p.terminal)?;
     settings::set(c, DEFAULT_PORTS, &p.default_ports)?;
     settings::set(c, START_SERVICES, &p.start_services)?;
-    settings::set(c, DOWNLOAD_TIMEOUTS, &p.download_timeouts)
+    settings::set(c, DOWNLOAD_TIMEOUTS, &p.download_timeouts)?;
+    settings::set(c, CLOSE_ACTION, &p.close_action)
 }
 
 #[cfg(test)]
@@ -306,6 +336,7 @@ mod tests {
                 connect_secs: 60,
                 idle_secs: 120,
             },
+            close_action: CloseAction::Tray,
         };
         db.write(|c| save(c, &p)).unwrap();
         assert_eq!(db.read(load).unwrap(), p);
@@ -330,6 +361,13 @@ mod tests {
             Preferences {
                 default_ports: DefaultPorts {
                     mailpit_web: 1025,
+                    ..DefaultPorts::default()
+                },
+                ..Preferences::default()
+            },
+            Preferences {
+                default_ports: DefaultPorts {
+                    caddy: 2019,
                     ..DefaultPorts::default()
                 },
                 ..Preferences::default()
@@ -380,6 +418,28 @@ mod tests {
         })
         .unwrap();
         assert_eq!(db.read(load).unwrap(), Preferences::default());
+    }
+
+    /// A row saved before Caddy existed keeps its ports; Caddy gets its defaults.
+    #[test]
+    fn ports_saved_by_an_older_build_are_kept() {
+        let db = db();
+        db.write(|c| {
+            settings::set(
+                c,
+                DEFAULT_PORTS,
+                &serde_json::json!({"nginx": 8080, "apache": 8081, "mariadb": 3307,
+                    "postgresql": 5432, "mongodb": 27017, "mailpit": 1025, "mailpitWeb": 8025}),
+            )
+        })
+        .unwrap();
+        let ports = db.read(load).unwrap().default_ports;
+        assert_eq!(
+            (ports.nginx, ports.apache, ports.mariadb),
+            (8080, 8081, 3307)
+        );
+        assert_eq!((ports.caddy, ports.caddy_admin), (80, 2019));
+        assert_eq!(ports.for_adapter(AdapterId::Caddy), Some((80, Some(2019))));
     }
 }
 

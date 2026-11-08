@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "2026.10.5",
+  "catalogVersion": "2026.11.3",
   "packages": [
     {
       "id": "php",
@@ -21,10 +21,60 @@
       ],
       "versions": [
         {
+          "version": "8.5.12-1",
+          "architecture": "x64",
+          "source": {
+            "url": "https://windows.php.net/downloads/releases/php-8.5.12-1-nts-Win32-vs17-x64.zip",
+            "archive": "zip",
+            "sizeBytes": 36310917
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "2a36a2edcb7a5b9252f638fd5e4cf84d7f6e066092654220dc0b63e5cf4e9723"
+          },
+          "executables": [
+            {
+              "path": "php.exe",
+              "expectedVersion": "8.5.12"
+            },
+            {
+              "path": "php-cgi.exe",
+              "expectedVersion": "8.5.12"
+            }
+          ],
+          "releaseDate": "2026-10-26",
+          "endOfLifeDate": "2029-12-31"
+        },
+        {
+          "version": "8.5.12",
+          "architecture": "x64",
+          "source": {
+            "url": "https://windows.php.net/downloads/releases/archives/php-8.5.12-nts-Win32-vs17-x64.zip",
+            "archive": "zip",
+            "sizeBytes": 36306925
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "2ab242af38d76bdf417cde5ec048b1bcd76a5a40f39a3d15d5f046f38571c477"
+          },
+          "executables": [
+            {
+              "path": "php.exe",
+              "expectedVersion": "8.5.12"
+            },
+            {
+              "path": "php-cgi.exe",
+              "expectedVersion": "8.5.12"
+            }
+          ],
+          "endOfLifeDate": "2029-12-31",
+          "supersededBy": "8.5.12-1"
+        },
+        {
           "version": "8.5.11",
           "architecture": "x64",
           "source": {
-            "url": "https://windows.php.net/downloads/releases/php-8.5.11-nts-Win32-vs17-x64.zip",
+            "url": "https://windows.php.net/downloads/releases/archives/php-8.5.11-nts-Win32-vs17-x64.zip",
             "archive": "zip",
             "sizeBytes": 36048897
           },
@@ -42,13 +92,64 @@
               "expectedVersion": "8.5.11"
             }
           ],
-          "endOfLifeDate": "2029-12-31"
+          "endOfLifeDate": "2029-12-31",
+          "supersededBy": "8.5.12-1"
+        },
+        {
+          "version": "8.4.27-1",
+          "architecture": "x64",
+          "source": {
+            "url": "https://windows.php.net/downloads/releases/php-8.4.27-1-nts-Win32-vs17-x64.zip",
+            "archive": "zip",
+            "sizeBytes": 35296081
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "dbae154a0a89791f36c3d48e68bae797878333e7d6cb5721e74617de59b63ab7"
+          },
+          "executables": [
+            {
+              "path": "php.exe",
+              "expectedVersion": "8.4.27"
+            },
+            {
+              "path": "php-cgi.exe",
+              "expectedVersion": "8.4.27"
+            }
+          ],
+          "releaseDate": "2026-10-26",
+          "endOfLifeDate": "2028-12-31"
+        },
+        {
+          "version": "8.4.27",
+          "architecture": "x64",
+          "source": {
+            "url": "https://windows.php.net/downloads/releases/archives/php-8.4.27-nts-Win32-vs17-x64.zip",
+            "archive": "zip",
+            "sizeBytes": 35290559
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "93bd8a815a52156606fb906d0573437908c61f96e2cc52c03a51e36a41bf5236"
+          },
+          "executables": [
+            {
+              "path": "php.exe",
+              "expectedVersion": "8.4.27"
+            },
+            {
+              "path": "php-cgi.exe",
+              "expectedVersion": "8.4.27"
+            }
+          ],
+          "endOfLifeDate": "2028-12-31",
+          "supersededBy": "8.4.27-1"
         },
         {
           "version": "8.4.26",
           "architecture": "x64",
           "source": {
-            "url": "https://windows.php.net/downloads/releases/php-8.4.26-nts-Win32-vs17-x64.zip",
+            "url": "https://windows.php.net/downloads/releases/archives/php-8.4.26-nts-Win32-vs17-x64.zip",
             "archive": "zip",
             "sizeBytes": 35103568
           },
@@ -66,13 +167,64 @@
               "expectedVersion": "8.4.26"
             }
           ],
-          "endOfLifeDate": "2028-12-31"
+          "endOfLifeDate": "2028-12-31",
+          "supersededBy": "8.4.27-1"
+        },
+        {
+          "version": "8.3.36-1",
+          "architecture": "x64",
+          "source": {
+            "url": "https://windows.php.net/downloads/releases/php-8.3.36-1-nts-Win32-vs16-x64.zip",
+            "archive": "zip",
+            "sizeBytes": 34179998
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "1a097d52b7a68622cdc723073b61cc70caf79c941218ff65b2d8441dbc6b10d4"
+          },
+          "executables": [
+            {
+              "path": "php.exe",
+              "expectedVersion": "8.3.36"
+            },
+            {
+              "path": "php-cgi.exe",
+              "expectedVersion": "8.3.36"
+            }
+          ],
+          "releaseDate": "2026-10-26",
+          "endOfLifeDate": "2027-12-31"
+        },
+        {
+          "version": "8.3.36",
+          "architecture": "x64",
+          "source": {
+            "url": "https://windows.php.net/downloads/releases/archives/php-8.3.36-nts-Win32-vs16-x64.zip",
+            "archive": "zip",
+            "sizeBytes": 34101685
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "3c9242622c7402b47c38d2ec2ed779cef3a290fd6f2bde6c35f9c482699e7900"
+          },
+          "executables": [
+            {
+              "path": "php.exe",
+              "expectedVersion": "8.3.36"
+            },
+            {
+              "path": "php-cgi.exe",
+              "expectedVersion": "8.3.36"
+            }
+          ],
+          "endOfLifeDate": "2027-12-31",
+          "supersededBy": "8.3.36-1"
         },
         {
           "version": "8.3.35",
           "architecture": "x64",
           "source": {
-            "url": "https://windows.php.net/downloads/releases/php-8.3.35-nts-Win32-vs16-x64.zip",
+            "url": "https://windows.php.net/downloads/releases/archives/php-8.3.35-nts-Win32-vs16-x64.zip",
             "archive": "zip",
             "sizeBytes": 33873909
           },
@@ -90,13 +242,64 @@
               "expectedVersion": "8.3.35"
             }
           ],
-          "endOfLifeDate": "2027-12-31"
+          "endOfLifeDate": "2027-12-31",
+          "supersededBy": "8.3.36-1"
+        },
+        {
+          "version": "8.2.35-1",
+          "architecture": "x64",
+          "source": {
+            "url": "https://windows.php.net/downloads/releases/php-8.2.35-1-nts-Win32-vs16-x64.zip",
+            "archive": "zip",
+            "sizeBytes": 33780725
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "ebe75134c03869826cb1714d31fd5eb96afefa6d9fd35d786971c03020e7bce2"
+          },
+          "executables": [
+            {
+              "path": "php.exe",
+              "expectedVersion": "8.2.35"
+            },
+            {
+              "path": "php-cgi.exe",
+              "expectedVersion": "8.2.35"
+            }
+          ],
+          "releaseDate": "2026-10-26",
+          "endOfLifeDate": "2026-12-31"
+        },
+        {
+          "version": "8.2.35",
+          "architecture": "x64",
+          "source": {
+            "url": "https://windows.php.net/downloads/releases/archives/php-8.2.35-nts-Win32-vs16-x64.zip",
+            "archive": "zip",
+            "sizeBytes": 33702163
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "798ffa4b9ce22a820d57048e9695df7245bf917ed067917f256942a10918a8cc"
+          },
+          "executables": [
+            {
+              "path": "php.exe",
+              "expectedVersion": "8.2.35"
+            },
+            {
+              "path": "php-cgi.exe",
+              "expectedVersion": "8.2.35"
+            }
+          ],
+          "endOfLifeDate": "2026-12-31",
+          "supersededBy": "8.2.35-1"
         },
         {
           "version": "8.2.34",
           "architecture": "x64",
           "source": {
-            "url": "https://windows.php.net/downloads/releases/php-8.2.34-nts-Win32-vs16-x64.zip",
+            "url": "https://windows.php.net/downloads/releases/archives/php-8.2.34-nts-Win32-vs16-x64.zip",
             "archive": "zip",
             "sizeBytes": 33472978
           },
@@ -114,7 +317,8 @@
               "expectedVersion": "8.2.34"
             }
           ],
-          "endOfLifeDate": "2026-12-31"
+          "endOfLifeDate": "2026-12-31",
+          "supersededBy": "8.2.35-1"
         },
         {
           "version": "8.1.34",
@@ -289,6 +493,27 @@
       ],
       "versions": [
         {
+          "version": "2.4.70",
+          "architecture": "x64",
+          "source": {
+            "url": "https://www.apachelounge.com/download/VS18/binaries/httpd-2.4.70-261106-Win64-VS18.zip",
+            "archive": "zip",
+            "sizeBytes": 14512491,
+            "stripComponents": 1
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "b96a40b66a99428b2e4aea48ebe98bab826c768df4ace81f78dd7e26a98ad311"
+          },
+          "executables": [
+            {
+              "path": "bin/httpd.exe",
+              "expectedVersion": "2.4.70"
+            }
+          ],
+          "releaseDate": "2026-11-06"
+        },
+        {
           "version": "2.4.69",
           "architecture": "x64",
           "source": {
@@ -307,7 +532,48 @@
               "expectedVersion": "2.4.69"
             }
           ],
-          "releaseDate": "2026-10-02"
+          "releaseDate": "2026-10-02",
+          "supersededBy": "2.4.70"
+        }
+      ]
+    },
+    {
+      "id": "caddy",
+      "displayName": "Caddy",
+      "category": "web_server",
+      "description": "Caddy 2 web server, official Windows x64 build. Devluma turns off its automatic HTTPS and uses certificates from your local CA.",
+      "publisher": "Caddy (caddyserver/caddy, sponsored by ZeroSSL)",
+      "homepageUrl": "https://caddyserver.com/",
+      "license": {
+        "id": "Apache-2.0",
+        "url": "https://github.com/caddyserver/caddy/blob/master/LICENSE"
+      },
+      "adapter": "caddy",
+      "allowedHosts": [
+        "github.com",
+        "release-assets.githubusercontent.com",
+        "objects.githubusercontent.com"
+      ],
+      "versions": [
+        {
+          "version": "2.11.9",
+          "architecture": "x64",
+          "source": {
+            "url": "https://github.com/caddyserver/caddy/releases/download/v2.11.9/caddy_2.11.9_windows_amd64.zip",
+            "archive": "zip",
+            "sizeBytes": 18384117
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "ad93112d335ee687100c4c9f11bced16ca590377976b7fe7883882b9e797e472"
+          },
+          "executables": [
+            {
+              "path": "caddy.exe",
+              "expectedVersion": "2.11.9"
+            }
+          ],
+          "releaseDate": "2026-11-05"
         }
       ]
     },

@@ -12,6 +12,7 @@ import {
   Shield,
   Wand2,
   Globe,
+  Zap,
 } from "lucide-react";
 import { useRef, useState, type ReactNode } from "react";
 import { Link, Navigate, useParams } from "react-router";
@@ -24,6 +25,7 @@ import { ipc } from "../../lib/ipc";
 import { useAsync } from "../../lib/useAsync";
 import type { Preferences, PreferencesView } from "../../types/dto";
 import { NgrokSettings } from "../tunnels/NgrokSettings";
+import { FrankenphpSettings } from "../frankenphp/FrankenphpSettings";
 import { AboutSettings, RuntimeDefaultsSettings, SecuritySettings, StorageSettings } from "./InfoSections";
 import {
   DownloadSettings,
@@ -66,6 +68,7 @@ const CATEGORIES: Category[] = [
   },
   { slug: "storage", label: "Storage", icon: HardDrive, render: () => <StorageSettings /> },
   { slug: "setup", label: "Setup", icon: Wand2, render: () => <SetupSettings /> },
+  { slug: "frankenphp", label: "FrankenPHP", icon: Zap, render: () => <FrankenphpSettings /> },
   { slug: "sharing", label: "Sharing with ngrok", icon: Share2, render: () => <NgrokSettings /> },
   { slug: "security", label: "Security & privacy", icon: Shield, render: () => <SecuritySettings /> },
   { slug: "updates", label: "Updates", icon: RefreshCw, render: () => <UpdateSettings /> },

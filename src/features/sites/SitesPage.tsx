@@ -121,7 +121,7 @@ function SitesTable({ sites, onEdit }: { sites: SiteView[]; onEdit: (s: SiteView
                     {!s.webServerRunning && <div className="text-xs text-warning">Not running</div>}
                   </td>
                   <td className="px-3 py-2">
-                    {s.phpVersion ?? "—"}
+                    {s.embeddedPhp ? `${s.embeddedPhp} (built in)` : (s.phpVersion ?? "—")}
                     {s.phpOutdated && (
                       <div className="text-xs text-warning">Project PHP changed — re-apply to switch</div>
                     )}

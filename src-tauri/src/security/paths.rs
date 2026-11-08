@@ -63,13 +63,24 @@ fn is_reserved_device_name(seg: &str) -> bool {
 }
 
 /// Verifies that an *existing* path resolves (following links/junctions) inside `root`.
+/// Returns the resolved path in plain `C:\…` form (see [`simplify`]).
 pub fn ensure_within(root: &Path, path: &Path) -> Result<PathBuf, PathError> {
     let root = dunce_canonical(root)?;
     let path = dunce_canonical(path)?;
     if path.starts_with(&root) {
-        Ok(path)
+        Ok(simplify(&path))
     } else {
         Err(PathError::Escapes)
+    }
+}
+
+/// `\\?\C:\x` → `C:\x` (canonicalize adds the verbatim prefix). Other programs often can't
+/// open verbatim paths: `php -c \\?\C:\…\php.ini` silently ignores the file (verified, 8.5).
+pub fn simplify(p: &Path) -> PathBuf {
+    let s = p.to_string_lossy();
+    match s.strip_prefix(r"\\?\") {
+        Some(rest) if rest.as_bytes().get(1) == Some(&b':') => PathBuf::from(rest),
+        _ => p.to_path_buf(),
     }
 }
 
@@ -128,6 +139,13 @@ mod tests {
         let inner = dir.path().join("a");
         std::fs::create_dir(&inner).unwrap();
         assert!(ensure_within(dir.path(), &inner).is_ok());
+        assert!(
+            !ensure_within(dir.path(), &inner)
+                .unwrap()
+                .to_string_lossy()
+                .starts_with(r"\\?\"),
+            "plain paths, which other programs can open"
+        );
         let other = tempfile::tempdir().unwrap();
         assert_eq!(
             ensure_within(dir.path(), other.path()),

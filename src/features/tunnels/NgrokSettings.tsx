@@ -104,7 +104,7 @@ function NgrokForm({ status, onChanged }: { status: NgrokStatus; onChanged: () =
             required
             value={path}
             onChange={(e) => setPath(e.target.value)}
-            placeholder="C:\\Tools\\ngrok\\ngrok.exe"
+            placeholder={String.raw`C:\Tools\ngrok\ngrok.exe`}
             className={`${input} font-mono`}
           />
         </label>

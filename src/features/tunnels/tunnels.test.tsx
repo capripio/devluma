@@ -40,6 +40,7 @@ const site = {
   url: "http://my-shop.test/",
   httpsUrl: null,
   phpVersion: null,
+  embeddedPhp: null,
   phpOutdated: false,
   configPresent: true,
 };

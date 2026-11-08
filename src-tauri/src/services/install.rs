@@ -196,6 +196,13 @@ fn preflight<'c>(
         .catalog
         .find_version(&req.package_id, &req.version, req.architecture)
         .ok_or_else(|| invalid("That package version is not in the catalog.".into()))?;
+    if let Some(newer) = &version.superseded_by {
+        return Err(invalid(format!(
+            "{name} {old} was replaced by {name} {newer}, which fixes bugs and security issues. Install {newer} instead.",
+            name = pkg.manifest.display_name,
+            old = version.version,
+        )));
+    }
     if !version.architecture.runs_on_host() {
         return Err(invalid(format!(
             "{} {} is built for {}, which this computer can't run.",
@@ -782,7 +789,15 @@ mod tests {
         });
         v["integrity"]["sha256"] = json!(hex::encode(Sha256::digest(&zip)));
         tweak(&mut v);
-        let mut p = fixtures::package("tool", vec![v]);
+        // A version marked as replaced gets its replacement listed too.
+        let mut versions = vec![v.clone()];
+        if let Some(newer) = v.get("supersededBy").and_then(|n| n.as_str()) {
+            let mut n = v.clone();
+            n["version"] = json!(newer);
+            n.as_object_mut().unwrap().remove("supersededBy");
+            versions.insert(0, n);
+        }
+        let mut p = fixtures::package("tool", versions);
         p["allowedHosts"] = json!(["127.0.0.1"]);
         let catalog = parse_and_validate(
             &fixtures::document(vec![p]),
@@ -975,6 +990,23 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn replaced_versions_are_refused_with_the_replacement_named() {
+        let h = harness(
+            tool_zip(),
+            |v| v["supersededBy"] = json!("1.2.4"),
+            "fixture-tool 1.2.3",
+        );
+        let err = h.manager.start(h.ctx.clone(), req()).err().unwrap();
+        assert_eq!(err.code, ErrorCode::ValidationError);
+        assert!(
+            err.message.contains("replaced by TOOL 1.2.4") && err.message.contains("security"),
+            "{}",
+            err.message
+        );
+        assert!(installations(&h).is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn preflight_rejects_duplicates_and_unsupported_policies() {
         let h = harness(tool_zip(), |_| {}, "fixture-tool 1.2.3");
         assert_eq!(install(&h).await.status, OperationStatus::Succeeded);
@@ -1077,7 +1109,7 @@ mod tests {
                 ctx.clone(),
                 InstallRequest {
                     package_id: "php".into(),
-                    version: "8.4.26".into(),
+                    version: "8.4.27-1".into(),
                     architecture: Architecture::X64,
                 },
             )
@@ -1090,7 +1122,7 @@ mod tests {
             "{:?}",
             op.safe_error_message
         );
-        let dir = install_dir(&ctx.paths, "php", "8.4.26", Architecture::X64);
+        let dir = install_dir(&ctx.paths, "php", "8.4.27-1", Architecture::X64);
         assert!(dir.join("php.exe").is_file() && dir.join("php-cgi.exe").is_file());
 
         // php.ini from the official template validates with the real php.exe, and enabling an

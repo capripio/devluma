@@ -4,7 +4,7 @@
 
 # Devluma: Free, Open-Source Laragon Alternative for Windows
 
-**A modern local development environment for Windows: PHP, Nginx, Apache, MariaDB, PostgreSQL,
+**A modern local development environment for Windows: PHP, Nginx, Apache, Caddy, MariaDB, PostgreSQL,
 MongoDB, Node.js, Python and Mailpit, with per-project versions, local `.test` domains and
 trusted HTTPS, in one portable app.**
 
@@ -47,7 +47,7 @@ config change is **validated and reversible**, and services only ever listen on 
   `PATH` is never modified. Choose PowerShell, Command Prompt or **Cmder**.
 
 ### Web servers and databases
-- **Nginx** and **Apache httpd**, with PHP served through FastCGI.
+- **Nginx**, **Apache httpd** and **Caddy**, with PHP served through FastCGI, and **FrankenPHP** (your own copy) with its built-in PHP.
 - **MariaDB** (MySQL-compatible), **PostgreSQL** and **MongoDB**, each with its own data folder.
 - **Mailpit** to catch outgoing email from your apps during development.
 - One-click **start, stop and restart**, service logs, and clear port-conflict reports (Devluma
@@ -85,7 +85,7 @@ transparency:
 | License | Free and open source (GPL-3.0) |
 | Portable | Yes: one self-contained folder, or a per-user installer |
 | Multiple PHP versions | Yes, plus per-project pins |
-| Web servers | Nginx and Apache |
+| Web servers | Nginx, Apache, Caddy and FrankenPHP (your own copy) |
 | Databases | MariaDB, PostgreSQL, MongoDB |
 | Other runtimes | Node.js, Python |
 | Local domains | `*.test` with a managed hosts-file block |
@@ -112,7 +112,7 @@ Get the latest version from the **[Releases page](https://github.com/capripio/de
 ## Quick start
 
 1. Run Devluma. The first-run setup asks where to keep your tools and data.
-2. Open **Runtimes & Packages** and install PHP, a web server (Nginx or Apache) and a
+2. Open **Runtimes & Packages** and install PHP, a web server (Nginx, Apache or Caddy) and a
    database, plus Node.js or Python if you need them.
 3. Open **Services**, add the web server and database, and start them.
 4. Add your project folder under **Projects**, then create a site such as `myapp.test` under
@@ -144,7 +144,7 @@ SQLite.
 ## FAQ
 
 **Is Devluma a drop-in replacement for Laragon?**
-It covers the same core workflow: PHP/Laravel/WordPress development with Nginx or Apache,
+It covers the same core workflow: PHP/Laravel/WordPress development with Nginx, Apache or Caddy,
 MySQL-compatible MariaDB, pretty local URLs and HTTPS. Projects stay where they are; Devluma
 never moves or deletes your project files.
 
@@ -169,7 +169,7 @@ domain names and is trusted on your machine only after you confirm it.
 Devluma is free software licensed under the [GNU General Public License v3.0](LICENSE).
 Third-party components are listed in [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) and
 [`sbom/devluma.cdx.json`](sbom/devluma.cdx.json). Packages that Devluma downloads (PHP, Nginx,
-Apache, MariaDB, PostgreSQL, MongoDB, Node.js, Python, Mailpit) are separate projects under
+Apache, Caddy, MariaDB, PostgreSQL, MongoDB, Node.js, Python, Mailpit) are separate projects under
 their own licenses.
 
 <!-- Keywords: Laragon alternative, XAMPP alternative, WAMP alternative, WampServer alternative,

@@ -2,9 +2,11 @@
 
 pub mod catalog;
 pub mod certificates;
+pub mod config;
 pub mod databases;
 pub mod diagnostics;
 pub mod download;
+pub mod frankenphp;
 pub mod hosts;
 pub mod install;
 pub mod journal;

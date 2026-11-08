@@ -7,6 +7,11 @@ import {
   installStartedSchema,
   operationProgressSchema,
   phpDetailsSchema,
+  configAppliedSchema,
+  configPreviewSchema,
+  configViewSchema,
+  type ConfigChange,
+  type ConfigTarget,
   projectSchema,
   projectViewSchema,
   portStatusSchema,
@@ -23,6 +28,7 @@ import {
   setupStatusSchema,
   updateSettingsSchema,
   uninstallPlanSchema,
+  frankenphpStatusSchema,
   ngrokStatusSchema,
   tunnelViewSchema,
   certificateViewSchema,
@@ -108,6 +114,13 @@ export const ipc = {
   getPhpDetails: (installationId: string) => call("get_php_details", { installationId }, phpDetailsSchema),
   createPhpIni: (installationId: string, template: "development" | "production") =>
     call("create_php_ini", { installationId, template }, phpDetailsSchema),
+  getConfig: (target: ConfigTarget) => call("get_config", { target }, configViewSchema),
+  previewConfigChange: (target: ConfigTarget, change: ConfigChange) =>
+    call("preview_config_change", { target, change }, configPreviewSchema),
+  applyConfigChange: (target: ConfigTarget, change: ConfigChange) =>
+    call("apply_config_change", { target, change }, configAppliedSchema),
+  readConfigBackup: (target: ConfigTarget, file: string, backupId: string) =>
+    call("read_config_backup", { target, file, backupId }, z.string()),
   listProjects: () => call("list_projects", undefined, z.array(projectViewSchema)),
   /** `folder` is relative to the projects folder (`www`); it is created when missing. */
   createProject: (name: string, folder: string, serviceIds: string[]) =>
@@ -116,6 +129,7 @@ export const ipc = {
     call("set_project_services", { projectId, serviceIds }, z.null()),
   startProjectServices: (projectId: string) => call("start_project_services", { projectId }, startAllSchema),
   removeProject: (projectId: string) => call("remove_project", { projectId }, z.null()),
+  openProjectFolder: (projectId: string) => call("open_project_folder", { projectId }, z.null()),
   openProjectTerminal: (projectId: string) =>
     call("open_project_terminal", { projectId }, terminalOpenedSchema),
   openTerminal: () => call("open_terminal", undefined, terminalOpenedSchema),
@@ -165,6 +179,9 @@ export const ipc = {
   snapshotDatabase: (serviceId: string) => call("snapshot_database", { serviceId }, backupRecordSchema),
   previewRestore: (request: RestoreRequest) => call("preview_restore", { request }, restorePlanSchema),
   restoreDatabase: (request: RestoreRequest) => call("restore_database", { request }, restorePlanSchema),
+  getFrankenphpStatus: () => call("get_frankenphp_status", undefined, frankenphpStatusSchema),
+  setFrankenphpPath: (path: string) => call("set_frankenphp_path", { path }, frankenphpStatusSchema),
+  removeFrankenphp: () => call("remove_frankenphp", undefined, frankenphpStatusSchema),
   getNgrokStatus: () => call("get_ngrok_status", undefined, ngrokStatusSchema),
   setNgrokPath: (path: string) => call("set_ngrok_path", { path }, ngrokStatusSchema),
   setNgrokToken: (token: string) => call("set_ngrok_token", { token }, ngrokStatusSchema),
@@ -205,6 +222,11 @@ export const ipc = {
   listScheduledJobRuns: (jobId: string) => call("list_scheduled_job_runs", { jobId }, z.array(jobRunSchema)),
   getScheduledJobRunLog: (jobId: string, runId: string) =>
     call("get_scheduled_job_run_log", { jobId, runId }, z.string()),
+  // Closing and quitting (`lifecycle.rs`).
+  registerCloseHandler: () => call("register_close_handler", undefined, z.null()),
+  hideMainWindow: () => call("hide_main_window", undefined, z.null()),
+  quitApp: () => call("quit_app", undefined, z.null()),
+  quitAppNow: () => call("quit_app_now", undefined, z.null()),
 };
 
 export const events = {
@@ -214,6 +236,10 @@ export const events = {
     subscribe("service://state", serviceStatusSchema, handler),
   onScheduledJob: (handler: (event: { jobId: string }) => void) =>
     subscribe("scheduler://job", jobEventSchema, handler),
+  /** The window's close button was clicked and the choice is "ask". */
+  onCloseRequested: (handler: () => void) => subscribe("app://close-requested", z.null(), handler),
+  /** Quit was chosen (close button, remembered choice, or the tray menu). */
+  onQuitRequested: (handler: () => void) => subscribe("app://quit-requested", z.null(), handler),
 };
 
 export { AppError } from "./errors";

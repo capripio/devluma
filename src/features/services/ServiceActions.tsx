@@ -6,6 +6,7 @@ import { ipc } from "../../lib/ipc";
 import { toAppError, type AppError } from "../../lib/ipc/errors";
 import type { ServiceView } from "../../types/dto";
 import { portConflictText } from "./portConflicts";
+import { adminPortInfo } from "./servicePackages";
 
 type Action = "start" | "stop" | "restart";
 
@@ -50,6 +51,7 @@ function CompactServiceActions({ service }: { service: ServiceView }) {
     ipc.openServiceUi(service.id).catch((e: unknown) => setError(toAppError(e)));
   };
 
+  const hasWebInterface = service.adminPort !== null && adminPortInfo(service.packageId).webInterface;
   const main: { action: Action; label: string; primary: boolean } | null =
     s === "stopped" || s === "failed"
       ? { action: "start", label: "Start", primary: true }
@@ -61,7 +63,7 @@ function CompactServiceActions({ service }: { service: ServiceView }) {
   const more: MoreMenuItem[] = [
     ...(s === "degraded" ? [{ label: "Stop", icon: Square, onSelect: () => run("stop") }] : []),
     ...(s === "running" ? [{ label: "Restart", icon: RotateCw, onSelect: () => run("restart") }] : []),
-    ...(s === "running" && service.adminPort !== null
+    ...(s === "running" && hasWebInterface
       ? [{ label: "Open web interface", icon: ExternalLink, onSelect: openUi }]
       : []),
   ];
@@ -96,6 +98,7 @@ function FullServiceActions({ service }: { service: ServiceView }) {
   const transitioning = s === "starting" || s === "stopping";
   const canStart = s === "stopped" || s === "failed";
   const canStop = s === "running" || s === "degraded" || s === "starting";
+  const hasWebInterface = service.adminPort !== null && adminPortInfo(service.packageId).webInterface;
 
   const run = (action: Action) => {
     setPending(action);
@@ -153,7 +156,7 @@ function FullServiceActions({ service }: { service: ServiceView }) {
             Restart
           </Button>
         )}
-        {s === "running" && service.adminPort !== null && (
+        {s === "running" && hasWebInterface && (
           <Button
             onClick={() => {
               setError(null);

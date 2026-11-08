@@ -32,6 +32,7 @@ use crate::domain::service::ServiceState;
 use crate::error::{ErrorCode, IpcError};
 use crate::persistence::installations::{self, InstallStatus};
 use crate::persistence::operations::{EventLevel, NewOperation};
+use crate::persistence::service_settings;
 use crate::persistence::services::{self, NewService, ServiceInstance};
 use crate::persistence::{Database, DbError};
 use crate::platform::windows::{job, ports};
@@ -190,12 +191,31 @@ impl Supervisor {
                 data_dir: svc.data_path.as_ref().map(PathBuf::from),
                 port,
                 admin_port: svc.admin_port.and_then(|p| u16::try_from(p).ok()),
+                settings: self
+                    .db
+                    .read(|c| service_settings::get(c, &svc.id))
+                    .map_err(db_fail)?,
             },
             behavior,
         ))
     }
 
-    fn claim(self: &Arc<Self>, id: &str) -> Result<BusyGuard, IpcError> {
+    /// The service, its context and behaviour, for config editing (`services::config`).
+    pub(crate) fn config_context(
+        &self,
+        id: &str,
+    ) -> Result<(ServiceInstance, ServiceCtx, &'static dyn ServiceBehavior), Failure> {
+        let svc = self.get(id)?;
+        let (ctx, beh) = self.context(&svc)?;
+        Ok((svc, ctx, beh))
+    }
+
+    pub(crate) fn paths(&self) -> &DataPaths {
+        &self.paths
+    }
+
+    /// Marks a service busy so no start/stop/config change runs at the same time.
+    pub(crate) fn claim(self: &Arc<Self>, id: &str) -> Result<BusyGuard, IpcError> {
         let mut busy = self.busy.lock().unwrap_or_else(|e| e.into_inner());
         if !busy.insert(id.to_owned()) {
             return Err(IpcError::new(
@@ -825,16 +845,17 @@ impl Supervisor {
                 "Install this version before creating a service from it.".into(),
             ));
         }
-        let pkg = self
-            .catalog
-            .package(&inst.package_id)
-            .ok_or_else(|| invalid("This package is no longer in the catalog.".into()))?;
-        let role = pkg.adapter.service_role().ok_or_else(|| {
-            invalid(format!(
-                "{} doesn't run as a service.",
-                pkg.manifest.display_name
-            ))
-        })?;
+        // Catalog packages, or a tool the user provided (ADR 0019: FrankenPHP).
+        let (pkg_adapter, display_name) = match self.catalog.package(&inst.package_id) {
+            Some(p) => (p.adapter, p.manifest.display_name.clone()),
+            None if inst.package_id == crate::services::frankenphp::PACKAGE_ID => {
+                (AdapterId::Frankenphp, "FrankenPHP".to_owned())
+            }
+            None => return Err(invalid("This package is no longer in the catalog.".into())),
+        };
+        let role = pkg_adapter
+            .service_role()
+            .ok_or_else(|| invalid(format!("{display_name} doesn't run as a service.")))?;
         let name = req.name.trim().to_owned();
         if name.is_empty()
             || name.len() > 60
@@ -846,7 +867,7 @@ impl Supervisor {
                 "Use 1–60 letters, digits, '-' or '_' for the service name.".into(),
             ));
         }
-        let beh = behavior::for_adapter(pkg.adapter)
+        let beh = behavior::for_adapter(pkg_adapter)
             .ok_or_else(|| invalid("This service type isn't supported by this build.".into()))?;
         let admin_port = match (beh.admin_port(), req.admin_port) {
             (Some(a), None) => {
@@ -905,7 +926,7 @@ impl Supervisor {
                     format!(
                         "{} already contains files. Choose an empty folder, or select \"Use the existing data in this folder\" if it's a {} data folder.",
                         dir.display(),
-                        pkg.manifest.display_name
+                        display_name
                     ),
                     false,
                 ));
@@ -919,7 +940,7 @@ impl Supervisor {
             target_id: Some(&inst.id),
         })?;
         let me = Arc::clone(self);
-        let (op_id, adapter) = (op.id.clone(), pkg.adapter);
+        let (op_id, adapter) = (op.id.clone(), pkg_adapter);
         let install_dir = PathBuf::from(&inst.install_path);
         let handle = tauri::async_runtime::spawn_blocking(move || {
             let journal = me.journal();
@@ -1090,7 +1111,7 @@ pub struct LogTail {
     pub lines: Vec<String>,
 }
 
-struct BusyGuard {
+pub(crate) struct BusyGuard {
     sup: Arc<Supervisor>,
     id: String,
 }

@@ -6,6 +6,7 @@ import { ipc } from "../../lib/ipc";
 import { toAppError, type AppError } from "../../lib/ipc/errors";
 import { useAsync } from "../../lib/useAsync";
 import type {
+  CloseAction,
   DefaultPorts,
   LaunchAtLogin,
   Preferences,
@@ -195,6 +196,8 @@ export function SitesAndTerminalSettings({ view, save }: PreferencesProps) {
 const PORT_FIELDS: { key: keyof DefaultPorts; label: string }[] = [
   { key: "nginx", label: "Nginx" },
   { key: "apache", label: "Apache" },
+  { key: "caddy", label: "Caddy" },
+  { key: "caddyAdmin", label: "Caddy admin API" },
   { key: "mariadb", label: "MariaDB" },
   { key: "postgresql", label: "PostgreSQL" },
   { key: "mongodb", label: "MongoDB" },
@@ -347,9 +350,16 @@ const LOGIN_TEXT: Record<LaunchAtLogin, string> = {
   other_copy: "On, but for a different copy of devluma.exe",
 };
 
-/** Settings → Startup behavior: start with Windows, and services to start with Devluma. */
+const CLOSE_ACTIONS: [CloseAction, string][] = [
+  ["ask", "Ask me each time"],
+  ["tray", "Keep running in the notification area"],
+  ["quit", "Quit and stop all services"],
+];
+
+/** Settings → Startup behavior: start with Windows, services to start, and what closing does. */
 export function StartupSettings({ view, save, onChanged }: PreferencesProps & { onChanged: () => void }) {
   const [selected, setSelected] = useState<string[]>(view.preferences.startServices);
+  const [closeAction, setCloseAction] = useState<CloseAction>(view.preferences.closeAction);
   const { run, footer, reset } = useSaver(save);
   const services = useAsync(ipc.listServices);
   const [login, setLogin] = useState<{ busy: boolean; error: AppError | null }>({ busy: false, error: null });
@@ -393,7 +403,7 @@ export function StartupSettings({ view, save, onChanged }: PreferencesProps & { 
         {login.error && <ErrorPanel error={login.error} />}
       </div>
 
-      <form onSubmit={run({ startServices: selected })} className="flex flex-col gap-2">
+      <form onSubmit={run({ startServices: selected, closeAction })} className="flex flex-col gap-2">
         <fieldset>
           <legend className="text-fg-muted">Start these services when Devluma opens</legend>
           {services.status === "pending" && <LoadingState label="Loading services…" shape="inline" />}
@@ -422,8 +432,32 @@ export function StartupSettings({ view, save, onChanged }: PreferencesProps & { 
               </div>
             ))}
           <p className="mt-1 text-fg-muted">
-            Each start shows up in Operations like a manual start. Devluma still stops its services when it
-            closes.
+            Each start shows up in Operations like a manual start. Quitting Devluma stops its services.
+          </p>
+        </fieldset>
+        <fieldset className="mt-2">
+          <legend className="text-fg-muted">When I close the window</legend>
+          <div className="mt-2 flex flex-col gap-1">
+            {CLOSE_ACTIONS.map(([value, label]) => (
+              <label key={value} className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="close-action"
+                  value={value}
+                  checked={closeAction === value}
+                  onChange={() => {
+                    setCloseAction(value);
+                    reset();
+                  }}
+                  className="accent-accent"
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+          <p className="mt-1 text-fg-muted">
+            Kept running, Devluma lives in the notification area next to the clock; right-click its icon to
+            start or stop all services, or to quit.
           </p>
         </fieldset>
         {footer}

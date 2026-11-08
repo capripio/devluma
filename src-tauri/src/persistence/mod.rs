@@ -11,6 +11,7 @@ pub mod packages;
 pub mod projects;
 pub mod scheduler;
 pub mod secrets;
+pub mod service_settings;
 pub mod services;
 pub mod settings;
 pub mod sites;

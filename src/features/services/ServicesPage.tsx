@@ -13,6 +13,7 @@ import { ServiceActions } from "./ServiceActions";
 import { ServiceDetail } from "./ServiceDetailPage";
 import { HEALTH_LABELS } from "./ServiceInspector";
 import { portConflictText } from "./portConflicts";
+import { adminPortInfo } from "./servicePackages";
 import { useServices } from "./useServices";
 import { ipc } from "../../lib/ipc";
 import { useAsync } from "../../lib/useAsync";
@@ -216,7 +217,11 @@ function ServiceGroup({ title, services }: { title: string; services: ServiceVie
                   </td>
                   <td className="px-3 py-2 font-mono">
                     {s.port ?? "—"}
-                    {s.adminPort !== null && <div className="text-xs text-fg-muted">UI {s.adminPort}</div>}
+                    {s.adminPort !== null && (
+                      <div className="text-xs text-fg-muted">
+                        {adminPortInfo(s.packageId).short} {s.adminPort}
+                      </div>
+                    )}
                     {portConflictText(s) && (
                       <p className="mt-1 max-w-xs font-sans text-xs text-warning">{portConflictText(s)}</p>
                     )}

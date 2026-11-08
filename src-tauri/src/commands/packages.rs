@@ -49,6 +49,8 @@ pub struct VersionView {
     pub conflicts: Vec<String>,
     pub release_date: Option<String>,
     pub end_of_life_date: Option<String>,
+    /// The newer version that replaces this one, if any (catalog `supersededBy`).
+    pub superseded_by: Option<String>,
     pub install_path: String,
     /// Why this version can't be installed right now, if it can't.
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -85,7 +87,9 @@ fn build_view(catalog: &Catalog, state: &AppState, installed: &[Installation]) -
                         is_global_default: i.is_global_default,
                         installed_at: i.installed_at.clone(),
                     });
-                    let unavailable_reason = if !v.architecture.runs_on_host() {
+                    let unavailable_reason = if let Some(newer) = &v.superseded_by {
+                        Some(format!("Replaced by {newer}, which fixes bugs and security issues."))
+                    } else if !v.architecture.runs_on_host() {
                         Some(format!("Built for {}; this computer can't run it.", v.architecture.as_str()))
                     } else if v.integrity.policy == IntegrityPolicy::Sha256AndSignature {
                         Some("Requires publisher-signature verification, which isn't available in this build.".into())
@@ -108,6 +112,7 @@ fn build_view(catalog: &Catalog, state: &AppState, installed: &[Installation]) -
                         conflicts: v.conflicts.clone(),
                         release_date: v.release_date.clone(),
                         end_of_life_date: v.end_of_life_date.clone(),
+                        superseded_by: v.superseded_by.clone(),
                         install_path: install_dir(&state.paths, &m.id, &v.version, v.architecture)
                             .display()
                             .to_string(),

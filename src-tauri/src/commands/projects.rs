@@ -125,6 +125,27 @@ pub async fn remove_project(state: State<'_, AppState>, project_id: String) -> I
     blocking(move || Ok(db.write(|c| projects::remove(c, &project_id))?)).await
 }
 
+/// Opens the project's folder in File Explorer. The path comes from the database, never the UI.
+#[tauri::command]
+pub async fn open_project_folder(state: State<'_, AppState>, project_id: String) -> IpcResult<()> {
+    let db = state.db()?;
+    blocking(move || {
+        let project = db.read(|c| projects::get(c, &project_id))?;
+        crate::platform::windows::process::open_folder(std::path::Path::new(&project.root_path))
+            .map_err(|_| {
+                crate::error::IpcError::new(
+                    crate::error::ErrorCode::ValidationError,
+                    format!(
+                        "Could not open {}. Check that the folder still exists.",
+                        project.root_path
+                    ),
+                    true,
+                )
+            })
+    })
+    .await
+}
+
 /// Opens the terminal chosen in Settings in the project folder, with its runtimes first on
 /// PATH (that window only).
 #[tauri::command]

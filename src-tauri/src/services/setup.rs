@@ -158,6 +158,7 @@ fn defaults(db: &Database, adapter: AdapterId) -> Option<(&'static str, u16, Opt
     let name = match adapter {
         AdapterId::Nginx => "web",
         AdapterId::Apache => "apache",
+        AdapterId::Caddy => "caddy",
         AdapterId::Mariadb => "db",
         AdapterId::Postgresql => "pg",
         AdapterId::Mongodb => "mongo",
@@ -461,7 +462,7 @@ mod tests {
             items: vec![
                 SetupItem {
                     package_id: "php".into(),
-                    version: "8.4.26".into(),
+                    version: "8.4.27-1".into(),
                 },
                 SetupItem {
                     package_id: "nginx".into(),

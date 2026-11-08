@@ -69,9 +69,16 @@ pub async fn list_services(state: State<'_, AppState>) -> IpcResult<Vec<ServiceV
                     .and_then(|i| i.package_version_id.split('@').nth(1))
                     .unwrap_or_default()
                     .to_owned();
-                let package_name = catalog
-                    .package(&package_id)
-                    .map_or_else(|| package_id.clone(), |p| p.manifest.display_name.clone());
+                let package_name = catalog.package(&package_id).map_or_else(
+                    || {
+                        if package_id == crate::services::frankenphp::PACKAGE_ID {
+                            "FrankenPHP".to_owned()
+                        } else {
+                            package_id.clone()
+                        }
+                    },
+                    |p| p.manifest.display_name.clone(),
+                );
                 ServiceView {
                     role: AdapterId::parse(&service.lifecycle_adapter)
                         .and_then(AdapterId::service_role),
@@ -179,7 +186,12 @@ pub async fn open_service_ui(state: State<'_, AppState>, service_id: String) -> 
     let db = state.db()?;
     blocking(move || {
         let svc = db.read(|c| services::get(c, &service_id))?;
-        let port = svc.admin_port.ok_or_else(|| {
+        // Only a real web interface opens in the browser (not, e.g., Caddy's admin API).
+        let browsable = crate::domain::adapter::AdapterId::parse(&svc.lifecycle_adapter)
+            .and_then(crate::services::supervisor::behavior::for_adapter)
+            .and_then(|b| b.admin_port())
+            .is_some_and(|a| a.web_interface);
+        let port = svc.admin_port.filter(|_| browsable).ok_or_else(|| {
             crate::error::IpcError::new(
                 crate::error::ErrorCode::ValidationError,
                 "This service has no web interface.",

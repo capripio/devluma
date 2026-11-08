@@ -67,7 +67,7 @@ const plan = {
   configPath: String.raw`C:\Devluma\services\w1\sites\site-1.conf`,
   configText: "server { }",
   configDiff: "--- a\n+++ b\n+server_name my-shop.test;\n",
-  php: { installationId: "i-php", version: "8.4.26", port: 9000 },
+  php: { installationId: "i-php", version: "8.4.26", port: 9000, embedded: false },
   https: null,
   hosts: {
     path: String.raw`C:\Windows\System32\drivers\etc\hosts`,
@@ -104,6 +104,7 @@ const site = {
   url: "http://my-shop.test/",
   httpsUrl: null,
   phpVersion: "8.4.26",
+  embeddedPhp: null,
   phpOutdated: false,
   configPresent: true,
 };
@@ -113,7 +114,91 @@ describe("sites", () => {
     await renderApp("/sites");
     await userEvent.click((await screen.findAllByRole("button", { name: "Add site" }))[0]!);
     expect(await screen.findByText(/Add a project first/)).toBeInTheDocument();
-    expect(screen.getByText(/Create an Nginx service first/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Create a web server service \(Nginx, Apache or Caddy\) first/),
+    ).toBeInTheDocument();
+  });
+
+  it("says when PHP comes from FrankenPHP itself", async () => {
+    const fp = {
+      ...nginx,
+      id: "w4",
+      instanceName: "frankenphp",
+      lifecycleAdapter: "frankenphp",
+      packageId: "frankenphp",
+      packageName: "FrankenPHP",
+      adminPort: 2019,
+    };
+    await renderApp(
+      "/sites",
+      createMockAdapter({
+        ...defaultHandlers,
+        list_projects: () => [project],
+        list_services: () => [fp],
+        preview_site: () => ({
+          ...plan,
+          php: { installationId: "i-fp", version: "8.5.12", port: 0, embedded: true },
+          warnings: [
+            "frankenphp serves PHP 8.5.12 itself; My Shop's PHP version pin doesn't apply to this site.",
+          ],
+        }),
+      }),
+    );
+    await userEvent.click((await screen.findAllByRole("button", { name: "Add site" }))[0]!);
+    const form = await screen.findByRole("form", { name: "Add site" });
+    expect(within(form).getByLabelText("Serve PHP with FrankenPHP's built-in PHP")).toBeChecked();
+    await userEvent.click(within(form).getByRole("button", { name: "Preview changes" }));
+    const preview = await within(form).findByRole("region", { name: "Site preview" });
+    expect(preview).toHaveTextContent("PHP 8.5.12 (built into FrankenPHP)");
+    expect(preview).not.toHaveTextContent("FastCGI");
+    expect(preview).toHaveTextContent("PHP version pin doesn't apply");
+  });
+
+  it("offers every web server, not databases", async () => {
+    const apache = {
+      ...nginx,
+      id: "w2",
+      instanceName: "apache",
+      lifecycleAdapter: "apache",
+      packageId: "apache",
+      packageName: "Apache httpd",
+      port: 8081,
+    };
+    const caddy = {
+      ...nginx,
+      id: "w3",
+      instanceName: "caddy",
+      lifecycleAdapter: "caddy",
+      packageId: "caddy",
+      packageName: "Caddy",
+      port: 8082,
+      adminPort: 2019,
+    };
+    const db = {
+      ...nginx,
+      id: "d1",
+      instanceName: "db",
+      lifecycleAdapter: "mariadb",
+      role: "database",
+      packageName: "MariaDB",
+      port: 3306,
+    };
+    await renderApp(
+      "/sites",
+      createMockAdapter({
+        ...defaultHandlers,
+        list_projects: () => [project],
+        list_services: () => [nginx, apache, caddy, db],
+      }),
+    );
+    await userEvent.click((await screen.findAllByRole("button", { name: "Add site" }))[0]!);
+    const form = await screen.findByRole("form", { name: "Add site" });
+    const options = within(within(form).getByLabelText("Web server")).getAllByRole("option");
+    expect(options.map((o) => o.textContent)).toEqual([
+      "web — Nginx (port 80)",
+      "apache — Apache httpd (port 8081)",
+      "caddy — Caddy (port 8082)",
+    ]);
   });
 
   it("suggests domains with the suffix chosen in Settings", async () => {
@@ -279,5 +364,82 @@ describe("sites", () => {
     expect(preview).toHaveTextContent("a certificate is created by Devluma's local CA");
     expect(preview).toHaveTextContent("Browsers will show a warning until you trust Devluma's local CA");
     expect(preview).toHaveTextContent("Applying this site doesn't trust anything");
+    expect(within(preview).getByRole("link", { name: "SSL Certificates" })).toHaveAttribute("href", "/ssl");
+  });
+
+  const localCa = (trustedNow: boolean) => ({
+    id: "ca",
+    commonName: "Devluma Local Development CA (PC)",
+    sans: [],
+    certificatePath: String.raw`C:\Devluma\certificates\ca\ca.pem`,
+    privateKeyPath: String.raw`C:\Devluma\certificates\ca\ca.key.dpapi`,
+    issuerType: "local_ca",
+    fingerprintSha256: "ab".repeat(32),
+    notBefore: "2026-10-11T00:00:00Z",
+    notAfter: "2036-10-12T00:00:00Z",
+    trustStore: trustedNow ? "CurrentUser\\Root" : null,
+    trusted: trustedNow,
+    createdAt: "2026-10-12T00:00:00Z",
+    updatedAt: "2026-10-12T00:00:00Z",
+    daysLeft: 3650,
+    expiringSoon: false,
+    expired: false,
+    trustedNow,
+    boundSites: [],
+    keyProtection: "Encrypted with Windows DPAPI for your account",
+  });
+
+  it("warns as soon as HTTPS is ticked when this computer doesn't trust the local CA", async () => {
+    const { container } = await renderApp(
+      "/sites",
+      createMockAdapter({
+        ...defaultHandlers,
+        list_projects: () => [project],
+        list_services: () => [nginx],
+        list_certificates: () => [],
+      }),
+    );
+    await userEvent.click((await screen.findAllByRole("button", { name: "Add site" }))[0]!);
+    const form = await screen.findByRole("form", { name: "Add site" });
+    expect(within(form).queryByText("SSL isn't set up on this computer yet")).not.toBeInTheDocument();
+    await userEvent.click(within(form).getByLabelText(/Also serve over HTTPS/));
+
+    const notice = await within(form).findByRole("status");
+    expect(notice).toHaveTextContent("SSL isn't set up on this computer yet");
+    expect(notice).toHaveTextContent("hasn't been created and trusted yet");
+    expect(notice).toHaveTextContent("https://my-shop.test is not secure");
+    expect(await axeViolations(container)).toEqual([]);
+
+    await userEvent.click(within(notice).getByRole("link", { name: "Set up SSL Certificates" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "SSL Certificates" })).toBeInTheDocument();
+  });
+
+  it("says when the local CA exists but isn't trusted, and stays quiet once it is", async () => {
+    let trusted = false;
+    await renderApp(
+      "/sites",
+      createMockAdapter({
+        ...defaultHandlers,
+        list_projects: () => [project],
+        list_services: () => [nginx],
+        list_certificates: () => [localCa(trusted)],
+      }),
+    );
+    await userEvent.click((await screen.findAllByRole("button", { name: "Add site" }))[0]!);
+    const form = await screen.findByRole("form", { name: "Add site" });
+    const https = within(form).getByLabelText(/Also serve over HTTPS/);
+    await userEvent.click(https);
+    expect(await within(form).findByRole("status")).toHaveTextContent(
+      "exists, but this computer doesn't trust it",
+    );
+
+    // Checked again each time HTTPS is ticked.
+    trusted = true;
+    await userEvent.click(https);
+    await userEvent.click(https);
+    expect(
+      await within(form).findByText(/This computer trusts Devluma's local certificate authority/),
+    ).toBeInTheDocument();
+    expect(within(form).queryByText("SSL isn't set up on this computer yet")).not.toBeInTheDocument();
   });
 });

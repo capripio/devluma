@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-read-config-backup"
+description = "Enables the read_config_backup command without any pre-configured scope."
+commands.allow = ["read_config_backup"]
+
+[[permission]]
+identifier = "deny-read-config-backup"
+description = "Denies the read_config_backup command without any pre-configured scope."
+commands.deny = ["read_config_backup"]

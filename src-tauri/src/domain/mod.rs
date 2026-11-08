@@ -2,6 +2,8 @@
 
 pub mod adapter;
 pub mod catalog;
+pub mod config_file;
+pub mod config_settings;
 pub mod domain_name;
 pub mod hosts;
 pub mod operation;

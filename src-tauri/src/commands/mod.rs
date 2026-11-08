@@ -3,8 +3,10 @@
 
 pub mod app;
 pub mod certificates;
+pub mod config;
 pub mod databases;
 pub mod diagnostics;
+pub mod frankenphp;
 pub mod operations;
 pub mod packages;
 pub mod projects;

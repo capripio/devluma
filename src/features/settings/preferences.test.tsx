@@ -120,6 +120,7 @@ describe("Settings preferences", () => {
     expect(savedPreferences(mock)).toMatchObject({
       domainSuffix: "localhost",
       downloadTimeouts: { connectSecs: 60, idleSecs: 30 },
+      closeAction: "ask",
     });
   });
 
@@ -187,8 +188,15 @@ describe("Settings preferences", () => {
     await waitFor(() => expect(section).toHaveTextContent("Currently: On."));
 
     await userEvent.click(await within(section).findByRole("checkbox", { name: "web" }));
+    // What closing the window does is chosen here too, and saved with the same form.
+    expect(within(section).getByRole("radio", { name: "Ask me each time" })).toBeChecked();
+    await userEvent.click(
+      within(section).getByRole("radio", { name: "Keep running in the notification area" }),
+    );
     await userEvent.click(within(section).getByRole("button", { name: "Save" }));
-    await waitFor(() => expect(savedPreferences(mock)).toMatchObject({ startServices: ["svc-1"] }));
+    await waitFor(() =>
+      expect(savedPreferences(mock)).toMatchObject({ startServices: ["svc-1"], closeAction: "tray" }),
+    );
   });
 
   it("lists storage folders with their sizes", async () => {

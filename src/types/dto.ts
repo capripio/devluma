@@ -108,6 +108,8 @@ const versionViewSchema = z.object({
   conflicts: z.array(z.string()),
   releaseDate: z.string().nullable(),
   endOfLifeDate: z.string().nullable(),
+  /** A newer release that replaces this one (catalog `supersededBy`); new installs are refused. */
+  supersededBy: z.string().nullable(),
   installPath: z.string(),
   unavailableReason: z.string().optional(),
   installation: z
@@ -193,6 +195,90 @@ export const phpDetailsSchema = z.object({
   startupWarnings: z.array(z.string()),
 });
 export type PhpDetails = z.infer<typeof phpDetailsSchema>;
+
+// `services/config.rs` + `domain/config_settings.rs` (ADR 0018).
+const choiceOptionSchema = z.object({ value: z.string(), label: z.string() });
+export const settingKindSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("size"), min: z.number(), max: z.number(), unlimited: z.string().nullable() }),
+  z.object({
+    type: z.literal("integer"),
+    min: z.number(),
+    max: z.number(),
+    unit: z.string(),
+    special: z.object({ value: z.number(), label: z.string() }).nullable(),
+  }),
+  z.object({ type: z.literal("toggle") }),
+  z.object({ type: z.literal("choice"), options: z.array(choiceOptionSchema) }),
+  z.object({ type: z.literal("timezone") }),
+]);
+export type SettingKind = z.infer<typeof settingKindSchema>;
+
+export const settingViewSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  help: z.string(),
+  group: z.string(),
+  kind: settingKindSchema,
+  /** Canonical value the tool uses when unset; `null` when it depends on the machine. */
+  default: z.string().nullable(),
+  defaultLabel: z.string().nullable(),
+  /** `null`: not set (the default applies), or not readable — then `raw` holds the text. */
+  value: z.string().nullable(),
+  raw: z.string().nullable(),
+});
+export type SettingView = z.infer<typeof settingViewSchema>;
+
+export const configFileSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  path: z.string(),
+  editable: z.boolean(),
+  readOnlyReason: z.string().nullable(),
+  language: z.string(),
+  note: z.string(),
+  text: z.string().nullable(),
+  hash: z.string(),
+  backups: z.array(z.object({ id: z.string(), createdAt: z.string() })),
+});
+export type ConfigFile = z.infer<typeof configFileSchema>;
+
+const appliesSchema = z.enum(["reload", "restart"]);
+export const configViewSchema = z.object({
+  settings: z.array(settingViewSchema),
+  settingsFile: z.string().nullable(),
+  settingsUnavailable: z.string().nullable(),
+  applies: appliesSchema.nullable(),
+  extensions: z.array(z.object({ name: z.string(), enabled: z.boolean() })).nullable(),
+  files: z.array(configFileSchema),
+});
+export type ConfigView = z.infer<typeof configViewSchema>;
+
+export const configPreviewSchema = z.object({
+  path: z.string(),
+  diff: z.string(),
+  check: z.string(),
+  applies: appliesSchema,
+});
+export type ConfigPreview = z.infer<typeof configPreviewSchema>;
+
+export const configAppliedSchema = z.object({
+  message: z.string(),
+  warnings: z.array(z.string()),
+  restart: z.array(z.object({ serviceId: z.string(), name: z.string() })),
+  view: configViewSchema,
+});
+export type ConfigApplied = z.infer<typeof configAppliedSchema>;
+
+export type ConfigTarget = { kind: "php"; installationId: string } | { kind: "service"; serviceId: string };
+
+export type ConfigChange =
+  | {
+      kind: "settings";
+      /** Changed settings only; `null` = back to the default. */
+      values: Record<string, string | null>;
+      extensions: Record<string, boolean>;
+    }
+  | { kind: "file"; file: string; text: string; baseHash: string };
 
 // `commands/projects.rs` `ProjectView`.
 export const projectSchema = z.object({
@@ -364,7 +450,15 @@ export const sitePlanSchema = z.object({
   configPath: z.string(),
   configText: z.string(),
   configDiff: z.string(),
-  php: z.object({ installationId: z.string(), version: z.string(), port: z.number().int() }).nullable(),
+  php: z
+    .object({
+      installationId: z.string(),
+      version: z.string(),
+      port: z.number().int(),
+      /** PHP built into the web server (FrankenPHP): no backend, no project pin. */
+      embedded: z.boolean(),
+    })
+    .nullable(),
   https: z
     .object({
       port: z.number().int(),
@@ -402,6 +496,8 @@ export const siteViewSchema = z.object({
   url: z.string(),
   httpsUrl: z.string().nullable(),
   phpVersion: z.string().nullable(),
+  /** PHP built into the web server (FrankenPHP): its version. */
+  embeddedPhp: z.string().nullable(),
   phpOutdated: z.boolean(),
   configPresent: z.boolean(),
 });
@@ -554,6 +650,18 @@ export const ngrokStatusSchema = z.object({
   detected: z.array(z.string()),
 });
 export type NgrokStatus = z.infer<typeof ngrokStatusSchema>;
+
+// `services::frankenphp` (ADR 0019): the user's own frankenphp.exe.
+export const frankenphpStatusSchema = z.object({
+  path: z.string().nullable(),
+  version: z.string().nullable(),
+  phpVersion: z.string().nullable(),
+  installationId: z.string().nullable(),
+  problem: z.string().nullable(),
+  services: z.array(z.string()),
+  detected: z.array(z.string()),
+});
+export type FrankenphpStatus = z.infer<typeof frankenphpStatusSchema>;
 export const tunnelViewSchema = z.object({
   siteId: z.string(),
   domain: z.string(),
@@ -596,6 +704,8 @@ export type TerminalProgram = z.infer<typeof terminalProgramSchema>;
 export const defaultPortsSchema = z.object({
   nginx: z.number(),
   apache: z.number(),
+  caddy: z.number(),
+  caddyAdmin: z.number(),
   mariadb: z.number(),
   postgresql: z.number(),
   mongodb: z.number(),
@@ -610,8 +720,11 @@ export const preferencesSchema = z.object({
   defaultPorts: defaultPortsSchema,
   startServices: z.array(z.string()),
   downloadTimeouts: z.object({ connectSecs: z.number(), idleSecs: z.number() }),
+  /** What the window's close button does (`services::preferences::CloseAction`). */
+  closeAction: z.enum(["ask", "tray", "quit"]),
 });
 export type Preferences = z.infer<typeof preferencesSchema>;
+export type CloseAction = Preferences["closeAction"];
 export const launchAtLoginSchema = z.enum(["off", "on", "other_copy"]);
 export type LaunchAtLogin = z.infer<typeof launchAtLoginSchema>;
 export const preferencesViewSchema = z.object({

@@ -337,6 +337,7 @@ describe("projects", () => {
       url: "http://shop.test/",
       httpsUrl: null,
       phpVersion: null,
+      embeddedPhp: null,
       phpOutdated: false,
       configPresent: true,
     };
@@ -462,6 +463,18 @@ describe("projects", () => {
     await waitFor(() => expect(mock.calls.some((c) => c.command === "remove_project")).toBe(true));
   });
 
+  it("opens the project folder in File Explorer", async () => {
+    const mock = createMockAdapter({
+      ...defaultHandlers,
+      list_projects: () => [project()],
+      open_project_folder: () => null,
+    });
+    await renderApp("/projects/p1", mock);
+    await userEvent.click(await screen.findByRole("button", { name: "Open folder of Shop" }));
+    expect(await screen.findByText("Opened D:\\code\\shop in File Explorer.")).toBeInTheDocument();
+    expect(mock.calls.find((c) => c.command === "open_project_folder")?.args).toEqual({ projectId: "p1" });
+  });
+
   it("opens a project terminal and says what's on PATH", async () => {
     await renderApp(
       "/projects/p1",
@@ -543,6 +556,14 @@ describe("global default and PHP details", () => {
       ...defaultHandlers,
       get_php_details: () => details,
       create_php_ini: () => ({ ...details, iniExists: true, loadedModules: ["Core", "curl", "date"] }),
+      get_config: () => ({
+        settings: [],
+        settingsFile: "main",
+        settingsUnavailable: null,
+        applies: "restart",
+        extensions: [{ name: "curl", enabled: true }],
+        files: [],
+      }),
     });
     const { container } = await renderApp("/runtimes/php/installations/i84", mock);
     expect(await screen.findByText(/No php.ini yet/)).toBeInTheDocument();
@@ -558,7 +579,9 @@ describe("global default and PHP details", () => {
       installationId: "i84",
       template: "development",
     });
-    expect(screen.getByText(/This version uses the php.ini above/)).toBeInTheDocument();
+    // The new php.ini opens in the settings panel.
+    expect(await screen.findByRole("tab", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: "curl" })).toBeChecked();
   });
 
   it("surfaces PHP startup warnings", async () => {

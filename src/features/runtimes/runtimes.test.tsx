@@ -212,6 +212,40 @@ describe("package detail and install", () => {
     expect(arm).toHaveAccessibleDescription("Built for arm64; this computer can't run it.");
   });
 
+  it("marks replaced versions: installed ones get an update notice, others can't be installed", async () => {
+    const replaced = "Replaced by 8.5.12, which fixes bugs and security issues.";
+    const view = catalogView([
+      packageView(
+        "php",
+        [
+          versionView("php", "8.5.12"),
+          versionView("php", "8.5.11", {
+            supersededBy: "8.5.12",
+            unavailableReason: replaced,
+            installation: {
+              id: "i-old",
+              status: "installed",
+              installPath: "C:\\Devluma\\bin\\php\\8.5.11-x64",
+              isGlobalDefault: true,
+              installedAt: null,
+            },
+          }),
+          versionView("php", "8.4.26", { supersededBy: "8.4.27", unavailableReason: replaced }),
+        ],
+        { displayName: "PHP" },
+      ),
+    ]);
+    const { container } = await renderApp("/runtimes/php", withCatalog(view));
+    expect(
+      await screen.findByText("Update available: 8.5.12 fixes bugs and security issues."),
+    ).toBeInTheDocument();
+    // The existing install keeps working: still listed, still uninstallable.
+    expect(screen.getByRole("button", { name: "Uninstall PHP 8.5.11" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Install PHP 8.4.26" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Install PHP 8.5.12" })).toBeEnabled();
+    expect(await axeViolations(container)).toEqual([]);
+  });
+
   it("handles unknown package ids", async () => {
     await renderApp("/runtimes/nope", withCatalog(catalogView([php])));
     expect(await screen.findByRole("heading", { name: "Package not found" })).toBeInTheDocument();

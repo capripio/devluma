@@ -19,14 +19,7 @@ fn invalid(msg: impl Into<String>) -> IpcError {
     IpcError::new(ErrorCode::ValidationError, msg, false)
 }
 
-/// `\\?\C:\x` → `C:\x` for display and storage (canonicalize adds the verbatim prefix).
-fn simplify(p: &Path) -> PathBuf {
-    let s = p.to_string_lossy();
-    match s.strip_prefix(r"\\?\") {
-        Some(rest) if rest.as_bytes().get(1) == Some(&b':') => PathBuf::from(rest),
-        _ => p.to_path_buf(),
-    }
-}
+use crate::security::paths::simplify;
 
 /// Resolves a folder relative to `www\` (for example `shop` or `clients\shop`). Absolute
 /// paths, `..` and Windows-hostile names are rejected.
@@ -180,8 +173,14 @@ pub fn start_all(
             "This project has no services yet. Choose the services it uses first.",
         ));
     }
+    Ok(start_each(supervisor, todo))
+}
+
+/// Starts each service that isn't running. One whose port another program holds is skipped;
+/// the message names that program. Also used by the tray's "Start all services".
+pub fn start_each(supervisor: &Arc<Supervisor>, services: Vec<ServiceInstance>) -> StartAll {
     let mut out = StartAll::default();
-    for svc in todo {
+    for svc in services {
         let name = svc.instance_name.clone();
         if svc.observed_state.is_live() {
             out.already_running.push(name);
@@ -210,7 +209,7 @@ pub fn start_all(
             }),
         }
     }
-    Ok(out)
+    out
 }
 
 /// What a project folder looks like, judged only by which files exist (app_flow.md §6:
