@@ -297,7 +297,7 @@ describe("projects", () => {
           packageId: "mariadb",
           packageName: "MariaDB",
           port: 3306,
-          observedState: "running",
+          observedState: "stopped",
         }),
       ],
       list_app_versions: (args) =>
@@ -361,6 +361,10 @@ describe("projects", () => {
     await userEvent.selectOptions(version, "7.0.8");
     await userEvent.type(within(form).getByLabelText("Name"), "News");
     expect(within(form).getByLabelText("Database")).toHaveValue("m1");
+    // A stopped database is started by the installer, not a reason to stop and ask.
+    expect(
+      within(form).getByRole("option", { name: "Create one on mariadb (port 3306, started for you)" }),
+    ).toBeInTheDocument();
     expect(await within(form).findByText(/Download WordPress 7\.0\.8/)).toBeInTheDocument();
     expect(await axeViolations(container)).toEqual([]);
     await userEvent.click(within(form).getByRole("button", { name: "Install WordPress" }));

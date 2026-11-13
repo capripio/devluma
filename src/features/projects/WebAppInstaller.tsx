@@ -323,7 +323,7 @@ function WordpressDatabase({
         {services.map((s) => (
           <option key={s.id} value={s.id}>
             Create one on {s.instanceName} (port {s.port}
-            {LIVE.has(s.observedState) ? "" : ", not running"})
+            {LIVE.has(s.observedState) ? "" : ", started for you"})
           </option>
         ))}
         <option value="">None: enter the details in WordPress&apos;s setup</option>

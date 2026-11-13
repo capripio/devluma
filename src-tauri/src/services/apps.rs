@@ -194,6 +194,27 @@ struct Resolved {
     composer_version: Option<String>,
     /// WordPress: the catalog release downloaded into this project (pinned SHA-256).
     wordpress: Option<VersionManifest>,
+    /// Stopped services the app needs before it's built (the database): (id, name).
+    start_first: Vec<(String, String)>,
+    /// The site's web server, when it's stopped: started before the site is created.
+    start_web: Option<(String, String)>,
+}
+
+/// A stopped service can be started by the operation only if no other program holds its
+/// ports; otherwise the user hears now which program has them (nothing is ever killed).
+fn port_free(svc: &crate::persistence::services::ServiceInstance) -> Result<(), IpcError> {
+    let taken = [svc.port, svc.admin_port]
+        .into_iter()
+        .flatten()
+        .filter_map(|p| u16::try_from(p).ok())
+        .find_map(|p| crate::platform::windows::ports::used_by(p).map(|who| (p, who)));
+    match taken {
+        Some((port, who)) => Err(invalid(format!(
+            "{} needs port {port}, which {who} is using. Free the port or change {}'s port on the Services page.",
+            svc.instance_name, svc.instance_name
+        ))),
+        None => Ok(()),
+    }
 }
 
 /// Whether two paths are on the same drive (a rename between them is possible).
@@ -566,6 +587,7 @@ impl AppsService {
         )
         .map_err(|e| invalid(format!("Couldn't check PHP {}: {e}", php.version)))?;
 
+        let mut start_first: Vec<(String, String)> = Vec::new();
         let database = match (&req.database_service_id, app) {
             (Some(id), App::Wordpress) => {
                 let svc = self
@@ -575,22 +597,22 @@ impl AppsService {
                 if svc.lifecycle_adapter != AdapterId::Mariadb.as_str() {
                     return Err(invalid("WordPress needs a MariaDB database service."));
                 }
-                if svc.observed_state.as_str() != "running" {
-                    return Err(invalid(format!(
-                        "Start {} first, so the WordPress database can be created.",
-                        svc.instance_name
-                    )));
-                }
                 let name = database_name(&target.display().to_string());
-                let existing = self
-                    .databases
-                    .databases(id)
-                    .map_err(|f| IpcError::new(f.code, f.message, true))?;
-                if existing.iter().any(|d| d.eq_ignore_ascii_case(&name)) {
-                    return Err(invalid(format!(
-                        "{} already has a database named {name}. Choose another folder name.",
-                        svc.instance_name
-                    )));
+                if svc.observed_state.as_str() == "running" {
+                    let existing = self
+                        .databases
+                        .databases(id)
+                        .map_err(|f| IpcError::new(f.code, f.message, true))?;
+                    if existing.iter().any(|d| d.eq_ignore_ascii_case(&name)) {
+                        return Err(invalid(format!(
+                            "{} already has a database named {name}. Choose another folder name.",
+                            svc.instance_name
+                        )));
+                    }
+                } else {
+                    // Started by the operation (the name is checked right after it starts).
+                    port_free(&svc)?;
+                    start_first.push((svc.id.clone(), svc.instance_name.clone()));
                 }
                 let port = svc
                     .port
@@ -600,16 +622,20 @@ impl AppsService {
             }
             _ => None,
         };
+        let mut start_web = None;
         if let Some(site) = &req.site {
-            let ok = self
+            let web = self
                 .db
                 .read(|c| services::get(c, &site.web_server_service_id))
                 .ok()
-                .and_then(|s| AdapterId::parse(&s.lifecycle_adapter))
-                .and_then(AdapterId::service_role)
-                == Some(crate::domain::adapter::ServiceRole::WebServer);
-            if !ok {
-                return Err(invalid("Choose a web server for the site."));
+                .filter(|s| {
+                    AdapterId::parse(&s.lifecycle_adapter).and_then(AdapterId::service_role)
+                        == Some(crate::domain::adapter::ServiceRole::WebServer)
+                })
+                .ok_or_else(|| invalid("Choose a web server for the site."))?;
+            if !web.observed_state.is_live() {
+                port_free(&web)?;
+                start_web = Some((web.id.clone(), web.instance_name.clone()));
             }
         }
         Ok(Resolved {
@@ -622,16 +648,23 @@ impl AppsService {
             existing,
             composer_version,
             wordpress,
+            start_first,
+            start_web,
         })
     }
 
     fn describe(r: &Resolved) -> AppPlan {
         let app = r.req.app;
         let mut steps: Vec<String> = r
-            .downloads
+            .start_first
             .iter()
-            .map(|d| format!("Download and verify {}.", d.label))
+            .map(|(_, name)| format!("Start {name}, which isn't running yet."))
             .collect();
+        steps.extend(
+            r.downloads
+                .iter()
+                .map(|d| format!("Download and verify {}.", d.label)),
+        );
         if !r.enable_extensions.is_empty() {
             steps.push(format!(
                 "Turn on {} in PHP {}'s php.ini (backed up first).",
@@ -665,11 +698,15 @@ impl AppsService {
             None => format!("Add the project at {}.", r.target.display()),
         });
         if let Some(site) = &r.req.site {
+            if let Some((_, name)) = &r.start_web {
+                steps.push(format!("Start {name}, the site's web server."));
+            }
             steps.push(format!(
                 "Create the site {} (Windows may ask for permission to add it to the hosts file).",
                 site.domain.trim()
             ));
         }
+        steps.push("Start the project's other services, as Start all does.".into());
         AppPlan {
             app,
             label: app.label().into(),
@@ -1026,6 +1063,24 @@ impl AppsService {
             }
         };
 
+        // Services the app needs to be built (the WordPress database), started first, so a
+        // database name that exists already is found before anything is created.
+        for (id, name) in &r.start_first {
+            self.start_and_wait(op_id, id, name)?;
+        }
+        if let Some((service_id, db_name, _)) = &r.database {
+            let existing = self
+                .databases
+                .databases(service_id)
+                .map_err(|f| IpcError::new(f.code, f.message, true))?;
+            if existing.iter().any(|d| d.eq_ignore_ascii_case(db_name)) {
+                return Err(invalid(format!(
+                    "That database server already has a database named {db_name}. Choose another folder name."
+                )));
+            }
+        }
+        check()?;
+
         if !r.enable_extensions.is_empty() {
             journal.progress(
                 op_id,
@@ -1215,7 +1270,14 @@ impl AppsService {
             }
         };
 
+        // The site, on a running web server, so its health check runs right away. The app is
+        // in place by now: a web server that won't start is reported, not undone.
         if let Some(site) = &r.req.site {
+            if let Some((id, name)) = &r.start_web
+                && let Err(e) = self.start_and_wait(op_id, id, name)
+            {
+                let _ = journal.event(op_id, EventLevel::Warn, &e.message, &serde_json::json!({}));
+            }
             journal.progress(op_id, "Creating the site", None, None)?;
             match projects::create_site(&self.db, &self.sites, &project, site) {
                 Ok(site_op) => {
@@ -1225,6 +1287,7 @@ impl AppsService {
                         "Site creation started",
                         &serde_json::json!({ "siteOperationId": site_op }),
                     );
+                    self.wait_for(&site_op, Duration::from_secs(120));
                 }
                 Err(e) => {
                     // The project is ready; the site can be added from its page.
@@ -1237,7 +1300,72 @@ impl AppsService {
                 }
             }
         }
+
+        // Then the rest of the project's services, as "Start all" does (a port another
+        // program holds is skipped and named, never taken over).
+        journal.progress(op_id, "Starting the project's services", None, None)?;
+        let todo = self
+            .db
+            .read(|c| projects::services_to_start(c, &project.id))
+            .unwrap_or_default();
+        let result = projects::start_each(self.sites.supervisor(), todo);
+        for started in &result.started {
+            self.wait_for(&started.operation_id, Duration::from_secs(60));
+        }
+        for skipped in &result.not_started {
+            let _ = journal.event(
+                op_id,
+                EventLevel::Warn,
+                &format!(
+                    "{} wasn't started: {}",
+                    skipped.service_name, skipped.message
+                ),
+                &serde_json::json!({}),
+            );
+        }
         Ok(())
+    }
+
+    /// Waits (up to `limit`) for another operation to finish.
+    fn wait_for(&self, operation_id: &str, limit: Duration) {
+        let until = std::time::Instant::now() + limit;
+        while std::time::Instant::now() < until {
+            let done = self
+                .db
+                .read(|c| crate::persistence::operations::get(c, operation_id))
+                .is_ok_and(|o| o.status.is_terminal());
+            if done {
+                return;
+            }
+            std::thread::sleep(Duration::from_millis(200));
+        }
+    }
+
+    /// Starts a service through the supervisor (its own journaled `start_service`) and waits
+    /// until it runs.
+    fn start_and_wait(&self, op_id: &str, id: &str, name: &str) -> Result<(), IpcError> {
+        let journal = Journal::new(&self.db, self.sink.as_ref());
+        journal.progress(op_id, &format!("Starting {name}"), None, None)?;
+        let sup = self.sites.supervisor();
+        let (start_op, handle) = sup.start(id)?;
+        let _ = tauri::async_runtime::block_on(handle);
+        let running = self
+            .db
+            .read(|c| services::get(c, id))
+            .is_ok_and(|s| s.observed_state.is_live());
+        if running {
+            return Ok(());
+        }
+        let why = self
+            .db
+            .read(|c| crate::persistence::operations::get(c, &start_op))
+            .ok()
+            .and_then(|o| o.safe_error_message)
+            .unwrap_or_else(|| "it didn't report running".into());
+        Err(failed(
+            ErrorCode::ProcessExited,
+            format!("Couldn't start {name}: {why}"),
+        ))
     }
 
     fn undo_db(&self, created: &Option<(String, String)>) {
@@ -1462,10 +1590,16 @@ $table_prefix = 'wp_';\n";
             .write(|c| crate::persistence::installations::set_global_default(c, &php.id))
             .unwrap();
         let web_port = free_port();
+        // Both stay stopped: the installer starts what it needs.
         let web = env.create("nginx", "web", web_port, None).await;
-        env.start(&web).await;
         let maria = env.create("mariadb", "db", free_port(), None).await;
-        env.start(&maria).await;
+        let is_live = |id: &str| {
+            env.db
+                .read(|c| services::get(c, id))
+                .unwrap()
+                .observed_state
+                .is_live()
+        };
 
         let sink: Arc<dyn ProgressSink> = Arc::new(RecordingSink::default());
         let probe: Arc<dyn ExecutableProbe> = Arc::new(ProcessProbe);
@@ -1607,6 +1741,12 @@ $table_prefix = 'wp_';\n";
         let plan = apps.preview(&req);
         assert_eq!(plan.blocked, None);
         assert!(
+            plan.steps
+                .iter()
+                .any(|s| s == "Start web, the site's web server."),
+            "{plan:?}"
+        );
+        assert!(
             plan.downloads
                 .iter()
                 .any(|d| d.starts_with("Composer 2.11.2")),
@@ -1667,6 +1807,7 @@ $table_prefix = 'wp_';\n";
             .is_empty()
         );
         sites_settled().await;
+        assert!(is_live(&web), "the installer started the site's web server");
         let (status, _, body) = get("api.test").await;
         assert_eq!(status, 200, "{body}");
         assert!(body.contains("Laravel"), "{}", &body[..body.len().min(400)]);
@@ -1712,6 +1853,17 @@ $table_prefix = 'wp_';\n";
             project_id: None,
         };
         let plan = apps.preview(&req);
+        assert_eq!(
+            plan.blocked, None,
+            "a stopped database isn't a reason to refuse"
+        );
+        assert!(
+            plan.steps
+                .iter()
+                .any(|s| s == "Start db, which isn't running yet."),
+            "{plan:?}"
+        );
+        assert!(!is_live(&maria));
         assert_eq!(plan.database_name.as_deref(), Some("news"));
         assert!(
             plan.downloads
@@ -1737,6 +1889,7 @@ $table_prefix = 'wp_';\n";
         let wp_config = std::fs::read_to_string(env.paths.www.join(r"news\wp-config.php")).unwrap();
         assert!(wp_config.contains("define( 'DB_NAME', 'news' );"));
         assert!(!wp_config.contains("put your unique phrase here"));
+        assert!(is_live(&maria), "the installer started the database");
         assert!(
             databases
                 .databases(&maria)
