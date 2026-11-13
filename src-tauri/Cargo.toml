@@ -1,6 +1,6 @@
 [package]
 name = "devluma"
-version = "0.5.1"
+version = "0.5.2"
 description = "Windows-first local development environment manager"
 authors = ["Muhammad Asif"]
 license = "GPL-3.0-only"
