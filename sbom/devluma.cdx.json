@@ -6,7 +6,7 @@
     "component": {
       "type": "application",
       "name": "Devluma",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "bom-ref": "devluma"
     }
   },
