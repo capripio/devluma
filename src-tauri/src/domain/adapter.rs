@@ -24,6 +24,10 @@ pub enum AdapterId {
     Frankenphp,
     /// Cmder console (a terminal, not a runtime or service; ADR 0015).
     Cmder,
+    /// Composer (`composer.phar`, run with the project's PHP; ADR 0020).
+    Composer,
+    /// WordPress release, copied into new projects by the app installer (ADR 0020).
+    Wordpress,
     /// Deterministic test package; never accepted outside `cfg(test)`.
     #[cfg(test)]
     Fixture,
@@ -63,6 +67,8 @@ impl AdapterId {
             "caddy" => Some(Self::Caddy),
             "frankenphp" => Some(Self::Frankenphp),
             "cmder" => Some(Self::Cmder),
+            "composer" => Some(Self::Composer),
+            "wordpress" => Some(Self::Wordpress),
             #[cfg(test)]
             "fixture" => Some(Self::Fixture),
             _ => None,
@@ -83,6 +89,8 @@ impl AdapterId {
             Self::Caddy => "caddy",
             Self::Frankenphp => "frankenphp",
             Self::Cmder => "cmder",
+            Self::Composer => "composer",
+            Self::Wordpress => "wordpress",
             #[cfg(test)]
             Self::Fixture => "fixture",
         }
@@ -152,6 +160,17 @@ impl AdapterId {
                 args: &[],
                 pattern: r"^FileVersion (\d+\.\d+\.\d+)\.\d+$",
             },
+            // Read from the file, never run: `const VERSION = '2.11.2';` in the phar's
+            // Composer.php (stored uncompressed; checked with 2.11.2).
+            Self::Composer => VersionProbe {
+                args: &[],
+                pattern: r"const VERSION = '(\d+\.\d+\.\d+)';",
+            },
+            // `$wp_version = '7.1.4';` in wp-includes/version.php ("7.2" for an x.y release).
+            Self::Wordpress => VersionProbe {
+                args: &[],
+                pattern: r"^\$wp_version = '(\d+\.\d+(?:\.\d+)?)';\r?$",
+            },
             #[cfg(test)]
             Self::Fixture => VersionProbe {
                 args: &["--version"],
@@ -169,7 +188,7 @@ impl AdapterId {
             Self::Php => Some(ServiceRole::FastCgi),
             Self::Mailpit => Some(ServiceRole::Mail),
             Self::Postgresql | Self::Mongodb => Some(ServiceRole::Database),
-            Self::Node | Self::Python | Self::Cmder => None,
+            Self::Node | Self::Python | Self::Cmder | Self::Composer | Self::Wordpress => None,
             #[cfg(test)]
             Self::Fixture => Some(ServiceRole::WebServer),
         }
@@ -194,7 +213,9 @@ impl AdapterId {
             | Self::Python
             | Self::Mailpit
             | Self::Mongodb
-            | Self::Cmder => &[],
+            | Self::Cmder
+            | Self::Composer
+            | Self::Wordpress => &[],
             // EDB's PostgreSQL builds link against the VC++ runtime but don't ship it.
             Self::Postgresql => &[("vcruntime140.dll", VC_REDIST), ("msvcp140.dll", VC_REDIST)],
             #[cfg(test)]
@@ -208,8 +229,8 @@ impl AdapterId {
             // The NuGet package keeps the interpreter in `tools/`; pip puts commands in
             // `tools/Scripts` once something is installed.
             Self::Python => &["tools", r"tools\Scripts"],
-            // A terminal program, not a tool to run from one.
-            Self::Cmder => &[],
+            // A terminal program, not a tool to run from one; WordPress is copied, not run.
+            Self::Cmder | Self::Wordpress => &[],
             _ => &[""],
         }
     }
@@ -224,6 +245,12 @@ impl AdapterId {
     /// output (the probe then reports `FileVersion <a.b.c.d>`).
     pub fn reads_version_resource(self) -> bool {
         matches!(self, Self::Cmder)
+    }
+
+    /// True when the version is read from the listed file's text (PHP code Devluma never
+    /// runs to verify it). The probe output is then the file's text.
+    pub fn reads_file_text(self) -> bool {
+        matches!(self, Self::Composer | Self::Wordpress)
     }
 
     /// Extracts the version from probe output, if it matches this adapter's format.
@@ -307,6 +334,41 @@ mod tests {
             Some("3.14.8")
         );
         assert_eq!(AdapterId::Python.parse_version("Python 3.15.0rc1\n"), None);
+    }
+
+    /// Text from the real files (Composer 2.11.2's phar, WordPress 7.1.4's version.php).
+    #[test]
+    fn composer_and_wordpress_versions_are_read_from_their_files() {
+        let phar = "class Composer\n{\n    public const VERSION = '2.11.2';\n    public const BRANCH_ALIAS_VERSION = '';";
+        assert_eq!(
+            AdapterId::Composer.parse_version(phar).as_deref(),
+            Some("2.11.2")
+        );
+        assert_eq!(
+            AdapterId::Composer.parse_version("const VERSION = '@package_version@';"),
+            None
+        );
+        let wp = "<?php\r\n$wp_version = '7.1.4';\r\n$wp_db_version = 60717;\r\n";
+        assert_eq!(
+            AdapterId::Wordpress.parse_version(wp).as_deref(),
+            Some("7.1.4")
+        );
+        assert_eq!(
+            AdapterId::Wordpress
+                .parse_version("$wp_version = '7.2';\n")
+                .as_deref(),
+            Some("7.2")
+        );
+        assert_eq!(
+            AdapterId::Wordpress.parse_version("$wp_version = '7.2-beta1';"),
+            None
+        );
+        for a in [AdapterId::Composer, AdapterId::Wordpress] {
+            assert!(a.reads_file_text() && a.service_role().is_none());
+            assert_eq!(AdapterId::parse(a.as_str()), Some(a));
+        }
+        assert!(AdapterId::Wordpress.path_dirs().is_empty());
+        assert_eq!(AdapterId::Composer.path_dirs(), &[""]);
     }
 
     #[test]

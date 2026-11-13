@@ -61,8 +61,11 @@ fn validate(f: &ProjectFields) -> DbResult<()> {
 }
 
 pub fn create(conn: &Connection, f: &ProjectFields) -> DbResult<Project> {
+    create_with_id(conn, &new_id(), f)
+}
+
+pub fn create_with_id(conn: &Connection, id: &str, f: &ProjectFields) -> DbResult<Project> {
     validate(f)?;
-    let id = new_id();
     let ts = now();
     conn.execute(
         "INSERT INTO projects (id, name, root_path, project_type, local_domain, notes, is_favorite, created_at, updated_at)
@@ -78,7 +81,7 @@ pub fn create(conn: &Connection, f: &ProjectFields) -> DbResult<Project> {
             ts
         ],
     )?;
-    get(conn, &id)
+    get(conn, id)
 }
 
 pub fn get(conn: &Connection, id: &str) -> DbResult<Project> {

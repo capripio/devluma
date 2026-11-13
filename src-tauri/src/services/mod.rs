@@ -1,7 +1,9 @@
 //! Domain services: orchestrate persistence, the filesystem and processes.
 
+pub mod apps;
 pub mod catalog;
 pub mod certificates;
+pub mod composer;
 pub mod config;
 pub mod databases;
 pub mod diagnostics;
@@ -10,6 +12,7 @@ pub mod frankenphp;
 pub mod hosts;
 pub mod install;
 pub mod journal;
+pub mod node_tools;
 pub mod php;
 pub mod preferences;
 pub mod projects;
@@ -20,6 +23,7 @@ pub mod setup;
 pub mod sites;
 pub mod storage;
 pub mod supervisor;
+pub mod tasks;
 pub mod terminal;
 pub mod tunnels;
 pub mod uninstall;

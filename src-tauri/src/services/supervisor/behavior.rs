@@ -229,7 +229,11 @@ pub fn for_adapter(adapter: AdapterId) -> Option<&'static dyn ServiceBehavior> {
         AdapterId::Apache => Some(&Apache),
         AdapterId::Caddy => Some(&CADDY),
         AdapterId::Frankenphp => Some(&FRANKENPHP),
-        AdapterId::Node | AdapterId::Python | AdapterId::Cmder => None,
+        AdapterId::Node
+        | AdapterId::Python
+        | AdapterId::Cmder
+        | AdapterId::Composer
+        | AdapterId::Wordpress => None,
         #[cfg(test)]
         AdapterId::Fixture => Some(&tests_support::Fixture),
     }

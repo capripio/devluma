@@ -141,6 +141,7 @@ pub fn open_terminal(
     launcher: &TerminalLauncher,
     cwd: &Path,
     path_prefix: &[String],
+    env: &[(String, String)],
 ) -> std::io::Result<()> {
     let mut path = std::ffi::OsString::new();
     for dir in path_prefix {
@@ -181,7 +182,10 @@ pub fn open_terminal(
             c
         }
     };
-    cmd.current_dir(cwd).env("PATH", path).spawn().map(|_| ())
+    cmd.current_dir(cwd)
+        .env("PATH", path)
+        .envs(env.iter().cloned());
+    cmd.spawn().map(|_| ())
 }
 
 /// Opens an `http://` URL in the user's default browser. Callers construct the URL from

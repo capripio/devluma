@@ -688,7 +688,11 @@ pub fn schema(adapter: AdapterId) -> Option<Schema> {
             FRANKENPHP_SPECS,
             Syntax::Caddy,
         ),
-        AdapterId::Node | AdapterId::Python | AdapterId::Cmder => None,
+        AdapterId::Node
+        | AdapterId::Python
+        | AdapterId::Cmder
+        | AdapterId::Composer
+        | AdapterId::Wordpress => None,
         #[cfg(test)]
         AdapterId::Fixture => s(
             Store::Managed,

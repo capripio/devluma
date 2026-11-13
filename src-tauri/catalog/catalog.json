@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "2026.11.3",
+  "catalogVersion": "2026.11.4",
   "packages": [
     {
       "id": "php",
@@ -973,6 +973,83 @@
             }
           ],
           "releaseDate": "2024-05-31"
+        }
+      ]
+    },
+    {
+      "id": "composer",
+      "displayName": "Composer",
+      "category": "tool",
+      "description": "Dependency manager for PHP. Runs with the project's PHP; `composer` works in Devluma's terminals.",
+      "publisher": "Composer (Nils Adermann, Jordi Boggiano)",
+      "homepageUrl": "https://getcomposer.org/",
+      "license": {
+        "id": "MIT",
+        "url": "https://github.com/composer/composer/blob/main/LICENSE"
+      },
+      "adapter": "composer",
+      "allowedHosts": [
+        "getcomposer.org"
+      ],
+      "versions": [
+        {
+          "version": "2.11.2",
+          "architecture": "x64",
+          "source": {
+            "url": "https://getcomposer.org/download/2.11.2/composer.phar",
+            "archive": "file",
+            "sizeBytes": 3815650
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "dd158c0afd41d15fac89e1b4e47b5d42911fe316c3687cd5edac98319b25d028"
+          },
+          "executables": [
+            {
+              "path": "composer.phar",
+              "expectedVersion": "2.11.2"
+            }
+          ],
+          "releaseDate": "2026-11-10"
+        }
+      ]
+    },
+    {
+      "id": "wordpress",
+      "displayName": "WordPress",
+      "category": "application",
+      "description": "WordPress release, copied into new projects by \"New project from an app\". Devluma never runs it to install.",
+      "publisher": "WordPress.org",
+      "homepageUrl": "https://wordpress.org/",
+      "license": {
+        "id": "GPL-2.0-or-later",
+        "url": "https://wordpress.org/about/license/"
+      },
+      "supportPolicyUrl": "https://make.wordpress.org/core/handbook/references/php-compatibility-and-wordpress-versions/",
+      "adapter": "wordpress",
+      "allowedHosts": [
+        "wordpress.org"
+      ],
+      "versions": [
+        {
+          "version": "7.1.4",
+          "architecture": "x64",
+          "source": {
+            "url": "https://wordpress.org/wordpress-7.1.4.zip",
+            "archive": "zip",
+            "sizeBytes": 37239942,
+            "stripComponents": 1
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "a147146c159362778ecbbbfb07bb20ddf4e85b130f971c824e656a8f938c5f87"
+          },
+          "executables": [
+            {
+              "path": "wp-includes/version.php",
+              "expectedVersion": "7.1.4"
+            }
+          ]
         }
       ]
     }

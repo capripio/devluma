@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-node-tools"
+description = "Enables the get_node_tools command without any pre-configured scope."
+commands.allow = ["get_node_tools"]
+
+[[permission]]
+identifier = "deny-get-node-tools"
+description = "Denies the get_node_tools command without any pre-configured scope."
+commands.deny = ["get_node_tools"]

@@ -23,7 +23,7 @@ use crate::security::paths::simplify;
 
 /// Resolves a folder relative to `www\` (for example `shop` or `clients\shop`). Absolute
 /// paths, `..` and Windows-hostile names are rejected.
-fn project_dir(folder: &str, paths: &DataPaths) -> Result<PathBuf, IpcError> {
+pub(crate) fn project_dir(folder: &str, paths: &DataPaths) -> Result<PathBuf, IpcError> {
     let folder = folder.trim();
     let example = "Enter a folder inside www, for example my-app.";
     let dir = crate::security::paths::join_relative(&paths.www, folder).map_err(|e| match e {
@@ -42,6 +42,25 @@ fn project_dir(folder: &str, paths: &DataPaths) -> Result<PathBuf, IpcError> {
 pub fn create(
     db: &Database,
     paths: &DataPaths,
+    name: &str,
+    folder: &str,
+    service_ids: &[String],
+) -> Result<Project, IpcError> {
+    create_as(
+        db,
+        paths,
+        &crate::persistence::new_id(),
+        name,
+        folder,
+        service_ids,
+    )
+}
+
+/// `create` with an id chosen up front (the app installer reports it before it's done).
+pub fn create_as(
+    db: &Database,
+    paths: &DataPaths,
+    id: &str,
     name: &str,
     folder: &str,
     service_ids: &[String],
@@ -86,8 +105,9 @@ pub fn create(
                 "That folder is already added as a project.".into(),
             ));
         }
-        let project = projects::create(
+        let project = projects::create_with_id(
             c,
+            id,
             &ProjectFields {
                 name: name.to_owned(),
                 root_path: root.clone(),
@@ -102,6 +122,50 @@ pub fn create(
         undo();
         IpcError::from(e)
     })
+}
+
+/// A site created together with a new project (no separate review step: the Add project
+/// form says what is created, ADR 0020). Everything else follows the project.
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SiteOptions {
+    pub domain: String,
+    pub web_server_service_id: String,
+    #[serde(default)]
+    pub https: bool,
+}
+
+/// Starts `apply_site` for a new project: detected document root, hosts entry, and PHP
+/// unless the project is clearly Node.js, Python or static (FrankenPHP has PHP built in;
+/// other servers need a PHP version for the project). Returns the operation id.
+pub fn create_site(
+    db: &Database,
+    sites: &Arc<crate::services::sites::SiteService>,
+    project: &Project,
+    opts: &SiteOptions,
+) -> Result<String, IpcError> {
+    let kind = detect(Path::new(&project.root_path)).kind;
+    let (php, embedded) = db.read(|c| {
+        let web = services::get(c, &opts.web_server_service_id)?;
+        Ok((
+            crate::services::runtime::effective(c, Some(&project.id), "php")?.is_some(),
+            web.lifecycle_adapter == AdapterId::Frankenphp.as_str(),
+        ))
+    })?;
+    let use_php = !matches!(kind, Some("node" | "python" | "static")) && (php || embedded);
+    sites
+        .apply(crate::services::sites::SiteRequest {
+            site_id: None,
+            project_id: project.id.clone(),
+            domain: opts.domain.trim().to_owned(),
+            web_server_service_id: opts.web_server_service_id.clone(),
+            use_php,
+            document_root: None,
+            manage_hosts: true,
+            expected_hosts_sha256: None,
+            https: opts.https,
+        })
+        .map(|(id, _)| id)
 }
 
 /// Services "Start all" starts for a project: the ones the user chose, plus the web server

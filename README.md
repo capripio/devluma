@@ -45,6 +45,16 @@ config change is **validated and reversible**, and services only ever listen on 
   Pins never affect other projects or the global default.
 - **Project terminal** that opens with the right runtime versions on `PATH`; your system
   `PATH` is never modified. Choose PowerShell, Command Prompt or **Cmder**.
+- **Composer** built in: `composer` works in every Devluma terminal with the project's PHP, and
+  each project has `composer install` / `composer update` buttons. Missing PHP extensions are
+  pointed out and turned on in one click.
+- **pnpm and Yarn** for Node.js, added through Node's own Corepack with one checkbox.
+
+### One-click apps
+- **New project from WordPress, Laravel or Symfony**: WordPress is copied from the verified
+  release and gets its own MariaDB database and `wp-config.php`; Laravel and Symfony come from
+  `composer create-project`. You see every step first and can cancel at any time.
+- **Every new project gets its website** (`myapp.test`, optionally with HTTPS) as it's created.
 
 ### Web servers and databases
 - **Nginx**, **Apache httpd** and **Caddy**, with PHP served through FastCGI, and **FrankenPHP** (your own copy) with its built-in PHP.
@@ -87,7 +97,8 @@ transparency:
 | Multiple PHP versions | Yes, plus per-project pins |
 | Web servers | Nginx, Apache, Caddy and FrankenPHP (your own copy) |
 | Databases | MariaDB, PostgreSQL, MongoDB |
-| Other runtimes | Node.js, Python |
+| Other runtimes | Node.js (with pnpm and Yarn), Python, Composer |
+| One-click apps | WordPress (with its database), Laravel, Symfony |
 | Local domains | `*.test` with a managed hosts-file block |
 | HTTPS | Name-constrained local CA, trusted only when you choose |
 | System `PATH` | Never modified |
@@ -115,8 +126,8 @@ Get the latest version from the **[Releases page](https://github.com/capripio/de
 2. Open **Runtimes & Packages** and install PHP, a web server (Nginx, Apache or Caddy) and a
    database, plus Node.js or Python if you need them.
 3. Open **Services**, add the web server and database, and start them.
-4. Add your project folder under **Projects**, then create a site such as `myapp.test` under
-   **Sites & Domains**.
+4. Under **Projects**, choose **Add project**: start from an empty folder, WordPress, Laravel or
+   Symfony. Its site (such as `myapp.test`) is created with it.
 5. Optionally create a certificate under **SSL Certificates** and enable HTTPS for the site.
 
 ## Build from source

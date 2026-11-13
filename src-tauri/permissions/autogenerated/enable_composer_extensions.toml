@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-enable-composer-extensions"
+description = "Enables the enable_composer_extensions command without any pre-configured scope."
+commands.allow = ["enable_composer_extensions"]
+
+[[permission]]
+identifier = "deny-enable-composer-extensions"
+description = "Denies the enable_composer_extensions command without any pre-configured scope."
+commands.deny = ["enable_composer_extensions"]

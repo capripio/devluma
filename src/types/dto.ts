@@ -86,6 +86,7 @@ export const PACKAGE_CATEGORIES = [
   "mail",
   "tunnel",
   "tool",
+  "application",
 ] as const;
 export type PackageCategory = (typeof PACKAGE_CATEGORIES)[number];
 
@@ -322,6 +323,77 @@ export const startAllSchema = z.object({
   notStarted: z.array(z.object({ serviceName: z.string(), message: z.string() })),
 });
 export type StartAll = z.infer<typeof startAllSchema>;
+
+// `commands/projects.rs` `CreatedProject`.
+export const createdProjectSchema = z.object({
+  project: projectSchema,
+  siteOperationId: z.string().nullable(),
+  siteError: z.string().nullable(),
+});
+export type CreatedProject = z.infer<typeof createdProjectSchema>;
+
+/** `services/projects.rs` `SiteOptions`: a site created together with a new project. */
+export interface NewSiteOptions {
+  domain: string;
+  webServerServiceId: string;
+  https: boolean;
+}
+
+// `services/apps.rs` (ADR 0020).
+export const WEB_APPS = ["wordpress", "laravel", "symfony"] as const;
+export type WebApp = (typeof WEB_APPS)[number];
+export const webAppInfoSchema = z.object({
+  app: z.enum(WEB_APPS),
+  label: z.string(),
+  needsComposer: z.boolean(),
+  minPhp: z.string(),
+  phpExtensions: z.array(z.string()),
+  usesDatabase: z.boolean(),
+});
+export type WebAppInfo = z.infer<typeof webAppInfoSchema>;
+export interface AppProjectRequest {
+  name: string;
+  folder: string;
+  app: WebApp;
+  serviceIds: string[];
+  site?: NewSiteOptions;
+  databaseServiceId?: string;
+}
+export const appPlanSchema = z.object({
+  app: z.enum(WEB_APPS),
+  label: z.string(),
+  targetPath: z.string(),
+  phpVersion: z.string().nullable(),
+  downloads: z.array(z.string()),
+  enableExtensions: z.array(z.string()),
+  databaseName: z.string().nullable(),
+  steps: z.array(z.string()),
+  blocked: z.string().nullable(),
+});
+export type AppPlan = z.infer<typeof appPlanSchema>;
+export const appStartedSchema = z.object({ operationId: z.string(), projectId: z.string() });
+
+// `services/node_tools.rs` (pnpm / Yarn through Corepack).
+export const NODE_PACKAGE_MANAGERS = ["pnpm", "yarn"] as const;
+export type NodePackageManager = (typeof NODE_PACKAGE_MANAGERS)[number];
+export const nodeToolsSchema = z.object({
+  installationId: z.string(),
+  corepack: z.boolean(),
+  enabled: z.array(z.enum(NODE_PACKAGE_MANAGERS)),
+});
+export type NodeTools = z.infer<typeof nodeToolsSchema>;
+
+// `services/composer.rs` `ComposerStatus`.
+export const composerStatusSchema = z.object({
+  composerVersion: z.string().nullable(),
+  phpVersion: z.string().nullable(),
+  phpInstallationId: z.string().nullable(),
+  missingExtensions: z.array(z.string()),
+  hasComposerJson: z.boolean(),
+  hasVendor: z.boolean(),
+  running: z.boolean(),
+});
+export type ComposerStatus = z.infer<typeof composerStatusSchema>;
 
 // `commands/services.rs` `PortStatus`.
 export const portStatusSchema = z.object({

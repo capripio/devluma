@@ -88,6 +88,14 @@ pub fn open(
         path_prefix.insert(0, venv);
     }
 
+    // Composer works in every Devluma terminal, even before it's made the default.
+    if let Some(composer) = db.read(|c| super::composer::find(c, project_id))? {
+        let dir = composer.install_path.trim_end_matches('\\').to_owned();
+        if !path_prefix.iter().any(|d| d.eq_ignore_ascii_case(&dir)) {
+            path_prefix.push(dir);
+        }
+    }
+
     let config_root = cmder_config_root(paths);
     let launcher = match prefs.terminal {
         TerminalProgram::PowerShell => TerminalLauncher::PowerShell,
@@ -106,7 +114,10 @@ pub fn open(
             }
         },
     };
-    process::open_terminal(&launcher, &cwd, &path_prefix).map_err(|_| {
+    // Composer's home and cache stay inside the Devluma folder (ADR 0020).
+    let mut env = super::composer::env(paths);
+    env.extend(super::node_tools::env(paths));
+    process::open_terminal(&launcher, &cwd, &path_prefix, &env).map_err(|_| {
         IpcError::new(
             ErrorCode::Internal,
             "Could not open a terminal window.",

@@ -25,6 +25,63 @@ function withCatalog(view: unknown, extra: Record<string, (args?: Record<string,
 }
 
 describe("runtimes catalog", () => {
+  it("adds pnpm to an installed Node.js and keeps WordPress from becoming a default", async () => {
+    const installed = (id: string) => ({
+      installation: {
+        id,
+        status: "installed",
+        installPath: `D:\\Devluma\\bin\\node\\${id}`,
+        isGlobalDefault: false,
+        installedAt: "2026-11-13T10:00:00.000Z",
+      },
+    });
+    const node = packageView("node", [versionView("node", "24.21.0", installed("n24"))], {
+      displayName: "Node.js",
+    });
+    let enabled: string[] = [];
+    const mock = withCatalog(catalogView([node]), {
+      get_node_tools: () => ({ installationId: "n24", corepack: true, enabled }),
+      set_node_tools: (args) => {
+        enabled = args?.enabled as string[];
+        return { installationId: "n24", corepack: true, enabled };
+      },
+    });
+    const { container } = await renderApp("/runtimes/node", mock);
+    const section = await screen.findByRole("region", { name: "Package managers" });
+    const pnpm = await within(section).findByLabelText("pnpm");
+    expect(pnpm).not.toBeChecked();
+    expect(within(section).getByRole("button", { name: "Save" })).toBeDisabled();
+    await userEvent.click(pnpm);
+    await userEvent.click(within(section).getByRole("button", { name: "Save" }));
+    expect(await within(section).findByText("Saved.")).toBeInTheDocument();
+    expect(mock.calls.find((c) => c.command === "set_node_tools")?.args).toEqual({
+      installationId: "n24",
+      enabled: ["pnpm"],
+    });
+    expect(await axeViolations(container)).toEqual([]);
+  });
+
+  it("doesn't offer a default for an application package", async () => {
+    const wp = packageView(
+      "wordpress",
+      [
+        versionView("wordpress", "7.1.4", {
+          installation: {
+            id: "wp1",
+            status: "installed",
+            installPath: String.raw`D:\Devluma\bin\wordpress\7.1.4-x64`,
+            isGlobalDefault: false,
+            installedAt: "2026-11-13T10:00:00.000Z",
+          },
+        }),
+      ],
+      { displayName: "WordPress", category: "application" },
+    );
+    await renderApp("/runtimes/wordpress", withCatalog(catalogView([wp])));
+    expect(await screen.findByRole("button", { name: "Uninstall WordPress 7.1.4" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Make WordPress/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Application")).toBeInTheDocument();
+  });
   it("says honestly when the catalog has no packages", async () => {
     await renderApp("/runtimes");
     expect(await screen.findByText("The package catalog is empty")).toBeInTheDocument();

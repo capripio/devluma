@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-run-composer"
+description = "Enables the run_composer command without any pre-configured scope."
+commands.allow = ["run_composer"]
+
+[[permission]]
+identifier = "deny-run-composer"
+description = "Denies the run_composer command without any pre-configured scope."
+commands.deny = ["run_composer"]

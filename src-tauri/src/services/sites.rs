@@ -1072,6 +1072,10 @@ impl SiteService {
         Ok((op.id, handle))
     }
 
+    pub fn supervisor(&self) -> &Arc<Supervisor> {
+        &self.supervisor
+    }
+
     pub fn list(&self) -> Result<Vec<SiteView>, IpcError> {
         let (all, projects, insts) = self
             .db

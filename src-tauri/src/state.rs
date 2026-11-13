@@ -132,6 +132,10 @@ pub struct AppState {
     pub diagnostics: Option<Arc<Diagnostics>>,
     pub updates: Option<Arc<UpdateService>>,
     pub config: Option<Arc<ConfigService>>,
+    /// Composer runs and app installs (cancellable via `tasks`).
+    pub tasks: Arc<crate::services::tasks::Tasks>,
+    pub composer: Option<Arc<crate::services::composer::ComposerService>>,
+    pub apps: Option<Arc<crate::services::apps::AppsService>>,
     sink: Arc<dyn ProgressSink>,
     db: Option<Arc<Database>>,
 }
@@ -180,6 +184,16 @@ impl AppState {
     pub fn config(&self) -> Result<Arc<ConfigService>, IpcError> {
         self.db()?;
         self.config.clone().ok_or_else(IpcError::internal)
+    }
+
+    pub fn composer(&self) -> Result<Arc<crate::services::composer::ComposerService>, IpcError> {
+        self.db()?;
+        self.composer.clone().ok_or_else(IpcError::internal)
+    }
+
+    pub fn apps(&self) -> Result<Arc<crate::services::apps::AppsService>, IpcError> {
+        self.db()?;
+        self.apps.clone().ok_or_else(IpcError::internal)
     }
 
     pub fn sites(&self) -> Result<Arc<SiteService>, IpcError> {
@@ -321,6 +335,36 @@ pub fn initialize(
             )),
             _ => None,
         };
+        let tasks = Arc::new(crate::services::tasks::Tasks::default());
+        let installs = Arc::new(InstallManager::default());
+        let composer = match (&db, &config) {
+            (Some(db), Some(cfg)) => Some(crate::services::composer::ComposerService::new(
+                Arc::clone(db),
+                paths.clone(),
+                Arc::new(ProcessProbe),
+                Arc::clone(&sink),
+                Arc::clone(cfg),
+                Arc::clone(&tasks),
+            )),
+            _ => None,
+        };
+        let apps = match (&db, &config, &databases, &sites) {
+            (Some(db), Some(cfg), Some(dbs), Some(sites)) => {
+                Some(crate::services::apps::AppsService::new(
+                    Arc::clone(db),
+                    Arc::clone(&catalog),
+                    paths.clone(),
+                    Arc::new(ProcessProbe),
+                    Arc::clone(&sink),
+                    Arc::clone(cfg),
+                    Arc::clone(dbs),
+                    Arc::clone(sites),
+                    Arc::clone(&installs),
+                    Arc::clone(&tasks),
+                ))
+            }
+            _ => None,
+        };
         let diagnostics = db.as_ref().map(|db| {
             Diagnostics::new(
                 Arc::clone(db),
@@ -343,7 +387,10 @@ pub fn initialize(
             startup,
             paths: paths.clone(),
             catalog: Arc::clone(&catalog),
-            installs: Arc::new(InstallManager::default()),
+            installs,
+            tasks,
+            composer,
+            apps,
             supervisor,
             hosts,
             sites,

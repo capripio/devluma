@@ -15,6 +15,10 @@ import { RuntimeSwitchDialog } from "../runtimes/RuntimeSwitchDialog";
 import { SiteForm } from "../sites/SiteForm";
 import { terminalOpenedMessage } from "../terminal/terminal";
 import { ChooseServicesForm, ProjectServiceList, startAllSummary } from "./ProjectServices";
+import { ComposerRow } from "./ComposerRow";
+
+/** Projects Composer is offered for (composer.json alone counts as "php"). */
+const PHP_KINDS = new Set(["laravel", "symfony", "wordpress", "php"]);
 
 /** Inline text action inside the fact list ("Change", "Choose", "Add site"). */
 const linkButton = "text-sm text-accent hover:underline disabled:opacity-60";
@@ -24,22 +28,24 @@ export function ProjectDetail({
   project: p,
   sites,
   services,
-  initialSiteDomain,
+  initialNote,
   onChanged,
 }: {
   project: ProjectView;
   sites: SiteView[];
   services: ServiceView[];
-  /** Set right after adding the project with "Also create a site". */
-  initialSiteDomain?: string;
+  /** Shown right after adding the project (e.g. its site is being created). */
+  initialNote?: string;
   onChanged: () => void;
 }) {
   const navigate = useNavigate();
-  const [panel, setPanel] = useState<"services" | "site" | null>(initialSiteDomain ? "site" : null);
+  const [panel, setPanel] = useState<"services" | "site" | null>(null);
   const [changing, setChanging] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
   // Result of the last action, read out politely.
-  const [note, setNote] = useState<{ message?: string; problems?: string[]; error?: AppError } | null>(null);
+  const [note, setNote] = useState<{ message?: string; problems?: string[]; error?: AppError } | null>(
+    initialNote ? { message: initialNote } : null,
+  );
 
   const report = <T,>(pending: string, run: () => Promise<T>, done: (r: T) => typeof note) => {
     setNote({ message: pending });
@@ -159,6 +165,8 @@ export function ProjectDetail({
           />
         ))}
 
+        {PHP_KINDS.has(p.detection.kind ?? "") && <ComposerRow project={p} />}
+
         <dt className="text-fg-muted">Services</dt>
         <dd className="flex flex-col items-start gap-2">
           <ProjectServiceList project={p} services={services} />
@@ -187,12 +195,7 @@ export function ProjectDetail({
       )}
       {panel === "site" && (
         <section aria-label={`Site for ${p.name}`} className="flex flex-col gap-2 text-sm">
-          {initialSiteDomain && (
-            <p className="text-fg-muted">
-              {p.name} was added. Review its site; nothing changes until you apply.
-            </p>
-          )}
-          <SiteForm initialProjectId={p.id} initialDomain={initialSiteDomain} onDone={() => setPanel(null)} />
+          <SiteForm initialProjectId={p.id} onDone={() => setPanel(null)} />
         </section>
       )}
 

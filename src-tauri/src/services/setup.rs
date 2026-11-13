@@ -52,6 +52,9 @@ pub struct SetupItem {
 #[serde(rename_all = "camelCase")]
 pub struct SetupPlan {
     pub items: Vec<SetupItem>,
+    /// pnpm / Yarn to turn on for the Node.js installed by this plan (ADR 0020).
+    #[serde(default)]
+    pub node_package_managers: Vec<super::node_tools::PackageManager>,
 }
 
 pub fn status(
@@ -288,9 +291,9 @@ pub fn start(
             };
 
             // 2. Runtimes become the default if none is set yet.
-            // Cmder is a terminal, not a runtime: it never becomes a "default".
+            // Cmder is a terminal and WordPress an app template: neither becomes a "default".
             let is_runtime = matches!(adapter.service_role(), None | Some(ServiceRole::FastCgi))
-                && adapter != AdapterId::Cmder;
+                && !matches!(adapter, AdapterId::Cmder | AdapterId::Wordpress);
             if is_runtime && runtime::effective_default_missing(&deps.db, &item.package_id) {
                 let (db, catalog, probe, sink) = (
                     Arc::clone(&deps.db),
@@ -310,6 +313,22 @@ pub fn start(
                 .await;
                 if !matches!(r, Ok(Ok(_))) {
                     failures.push(format!("{label}: couldn't make it the default"));
+                }
+            }
+
+            // pnpm / Yarn for Node.js, through its Corepack.
+            if adapter == AdapterId::Node && !plan.node_package_managers.is_empty() {
+                let (paths, dir, pms) = (
+                    deps.install_ctx.paths.clone(),
+                    std::path::PathBuf::from(&inst.install_path),
+                    plan.node_package_managers.clone(),
+                );
+                let r = tauri::async_runtime::spawn_blocking(move || {
+                    super::node_tools::apply(&paths, &dir, &pms)
+                })
+                .await;
+                if !matches!(r, Ok(Ok(()))) {
+                    failures.push(format!("{label}: couldn't add pnpm or Yarn"));
                 }
             }
 
@@ -459,6 +478,7 @@ mod tests {
             sink: Arc::clone(&sink),
         };
         let plan = || SetupPlan {
+            node_package_managers: Vec::new(),
             items: vec![
                 SetupItem {
                     package_id: "php".into(),

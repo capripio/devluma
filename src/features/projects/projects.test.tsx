@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { act, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import {
@@ -136,7 +136,7 @@ describe("projects", () => {
             recoverable: false,
           };
         }
-        return { ...project(), runtimes: undefined };
+        return { project: { ...project(), runtimes: undefined }, siteOperationId: null, siteError: null };
       },
     });
     await renderApp("/projects", mock);
@@ -146,7 +146,8 @@ describe("projects", () => {
     // The folder follows the name and shows where it ends up.
     expect(within(form).getByLabelText("Folder")).toHaveValue("my-shop");
     expect(within(form).getByText(/Devluma\\www\\my-shop/)).toBeInTheDocument();
-    await userEvent.click(within(form).getByLabelText("Also create a site at"));
+    // No web server yet: no site is offered, and the form says where to add one.
+    expect(within(form).getByText(/No web server yet/)).toBeInTheDocument();
     await userEvent.click(within(form).getByRole("button", { name: "Add project" }));
     expect(await within(form).findByRole("alert")).toHaveTextContent("inside www");
 
@@ -158,6 +159,7 @@ describe("projects", () => {
       name: "My Shop",
       folder: "clients\\shop",
       serviceIds: [],
+      site: null,
     });
     expect(screen.queryByRole("form", { name: "Add site" })).not.toBeInTheDocument();
   });
@@ -171,7 +173,11 @@ describe("projects", () => {
         svc("db", "database", { role: "database", packageName: "MariaDB", port: 3306 }),
         svc("php-8.4", "fast_cgi", { role: "fast_cgi", packageName: "PHP", port: 9000 }),
       ],
-      create_project: () => ({ ...project(), runtimes: undefined }),
+      create_project: () => ({
+        project: { ...project(), runtimes: undefined },
+        siteOperationId: null,
+        siteError: null,
+      }),
     });
     await renderApp("/projects", mock);
     await userEvent.click((await screen.findAllByRole("button", { name: "Add project" }))[0]!);
@@ -185,13 +191,14 @@ describe("projects", () => {
 
     await userEvent.click(within(services).getByLabelText(/^db/));
     await userEvent.type(within(form).getByLabelText("Name"), "Shop");
-    await userEvent.click(within(form).getByLabelText("Also create a site at"));
+    await userEvent.click(within(form).getByLabelText("Create a website at"));
     await userEvent.click(within(form).getByRole("button", { name: "Add project" }));
     await waitFor(() =>
       expect(mock.calls.find((c) => c.command === "create_project")?.args).toEqual({
         name: "Shop",
         folder: "shop",
         serviceIds: ["web"],
+        site: null,
       }),
     );
   });
@@ -237,44 +244,21 @@ describe("projects", () => {
     expect(screen.queryByRole("form", { name: "Services for Shop" })).not.toBeInTheDocument();
   });
 
-  it("offers the site for a new project with its domain filled in", async () => {
-    const added = project({ id: "p2", name: "Blog", rootPath: "C:\\Devluma\\www\\blog" });
+  it("creates the site together with a new project", async () => {
+    const added = project({ id: "p2", name: "Blog", rootPath: String.raw`C:\Devluma\www\blog` });
     let projects: unknown[] = [];
     const mock = createMockAdapter({
       ...defaultHandlers,
       get_preferences: () => preferencesView({ domainSuffix: "local" }),
       list_projects: () => projects,
-      list_services: () => [
-        {
-          id: "w1",
-          packageInstallationId: "i-ng",
-          instanceName: "web",
-          serviceType: "web_server",
-          lifecycleAdapter: "nginx",
-          desiredState: "running",
-          observedState: "running",
-          port: 80,
-          bindAddress: "127.0.0.1",
-          configPath: null,
-          dataPath: null,
-          pid: 1,
-          processStartedAt: null,
-          healthStatus: "healthy",
-          lastExitCode: null,
-          lastErrorCode: null,
-          jobName: null,
-          adminPort: null,
-          updatedAt: "2026-10-12T10:00:00.000Z",
-          role: "web_server",
-          packageId: "nginx",
-          packageName: "Nginx",
-          version: "1.30.5",
-          portConflicts: [],
-        },
-      ],
+      list_services: () => [svc("w1", "web_server", { instanceName: "web", observedState: "running" })],
       create_project: () => {
         projects = [added];
-        return { ...added, runtimes: undefined, detection: undefined };
+        return {
+          project: { ...added, runtimes: undefined, detection: undefined, serviceIds: undefined },
+          siteOperationId: "op-site",
+          siteError: null,
+        };
       },
     });
     const { container } = await renderApp("/projects", mock);
@@ -282,18 +266,154 @@ describe("projects", () => {
     const form = screen.getByRole("form", { name: "Add project" });
     await userEvent.type(within(form).getByLabelText("Name"), "Blog");
     await waitFor(() => expect(within(form).getByLabelText("Domain")).toHaveValue("blog.local"));
+    expect(within(form).getByText(/on web \(port 80\)/)).toBeInTheDocument();
+    expect(within(form).getByText(/Windows may ask/)).toBeInTheDocument();
+    await userEvent.click(within(form).getByLabelText(/Also serve over HTTPS/));
+    expect(await axeViolations(container)).toEqual([]);
     await userEvent.click(within(form).getByRole("button", { name: "Add project" }));
 
-    const site = await screen.findByRole("form", { name: "Add site" });
-    expect(screen.getByText(/Blog was added/)).toBeInTheDocument();
-    expect(within(site).getByLabelText("Domain")).toHaveValue("blog.local");
-    expect(within(site).getByLabelText("Project")).toHaveValue("p2");
-    // Nothing is applied until the user previews and applies.
-    expect(mock.calls.some((c) => c.command === "apply_site" || c.command === "preview_site")).toBe(false);
-    expect(await axeViolations(container)).toEqual([]);
-
-    await userEvent.click(within(site).getByRole("button", { name: "Cancel" }));
+    expect(await screen.findByText("Creating blog.local…")).toBeInTheDocument();
+    expect(mock.calls.find((c) => c.command === "create_project")?.args).toEqual({
+      name: "Blog",
+      folder: "blog",
+      serviceIds: ["w1"],
+      site: { domain: "blog.local", webServerServiceId: "w1", https: true },
+    });
+    // No second review step: the site isn't handed to the site form.
     expect(screen.queryByRole("form", { name: "Add site" })).not.toBeInTheDocument();
+  });
+
+  it("creates a WordPress project with its database, showing the plan and progress", async () => {
+    const added = project({ id: "p9", name: "News", rootPath: String.raw`C:\Devluma\www\news` });
+    let projects: unknown[] = [];
+    const mock = createMockAdapter({
+      ...defaultHandlers,
+      list_projects: () => projects,
+      list_services: () => [
+        svc("w1", "web_server", { instanceName: "web" }),
+        svc("m1", "database", {
+          instanceName: "mariadb",
+          role: "database",
+          packageId: "mariadb",
+          packageName: "MariaDB",
+          port: 3306,
+          observedState: "running",
+        }),
+      ],
+      preview_app_project: (args) => {
+        const req = args?.request as { folder: string };
+        return {
+          app: "wordpress",
+          label: "WordPress",
+          targetPath: String.raw`C:\Devluma\www\\` + req.folder,
+          phpVersion: "8.4.27",
+          downloads: ["WordPress 7.1.4 (36 MB)"],
+          enableExtensions: ["mysqli"],
+          databaseName: "news",
+          steps: [
+            "Download and verify WordPress 7.1.4 (36 MB).",
+            "Create the database news and write wp-config.php.",
+          ],
+          blocked: null,
+        };
+      },
+      create_app_project: () => ({ operationId: "op-app", projectId: "p9" }),
+    });
+    await renderApp("/projects", mock);
+    await userEvent.click((await screen.findAllByRole("button", { name: "Add project" }))[0]!);
+    const form = screen.getByRole("form", { name: "Add project" });
+    await userEvent.click(within(form).getByRole("radio", { name: /^WordPress/ }));
+    await userEvent.type(within(form).getByLabelText("Name"), "News");
+    expect(within(form).getByLabelText("Database")).toHaveValue("m1");
+    expect(
+      await within(form).findByText("Create the database news and write wp-config.php."),
+    ).toBeInTheDocument();
+    await userEvent.click(within(form).getByRole("button", { name: "Create WordPress project" }));
+
+    await waitFor(() =>
+      expect(mock.calls.find((c) => c.command === "create_app_project")?.args).toEqual({
+        request: {
+          name: "News",
+          folder: "news",
+          app: "wordpress",
+          serviceIds: ["w1", "m1"],
+          site: { domain: "news.test", webServerServiceId: "w1", https: false },
+          databaseServiceId: "m1",
+        },
+      }),
+    );
+    const progress = {
+      operationId: "op-app",
+      operationType: "create_app_project",
+      targetId: "p9",
+      startedAt: "2026-11-13T10:00:00.000Z",
+    };
+    act(() =>
+      mock.emit("operation://progress", { ...progress, status: "running", phase: "Copying WordPress" }),
+    );
+    expect(await within(form).findByText("Copying WordPress")).toBeInTheDocument();
+    expect(within(form).getByRole("button", { name: "Cancel creating the project" })).toBeInTheDocument();
+    projects = [added];
+    act(() => mock.emit("operation://progress", { ...progress, status: "succeeded" }));
+    expect(await screen.findByRole("heading", { name: "News" })).toBeInTheDocument();
+  });
+
+  it("explains why an app can't be installed and keeps the button disabled", async () => {
+    const mock = createMockAdapter({
+      ...defaultHandlers,
+      preview_app_project: () => ({
+        app: "laravel",
+        label: "Laravel",
+        targetPath: "",
+        phpVersion: null,
+        downloads: [],
+        enableExtensions: [],
+        databaseName: null,
+        steps: [],
+        blocked:
+          "Laravel needs PHP. Install a PHP version and make it the default on the Runtimes & Packages page.",
+      }),
+    });
+    await renderApp("/projects", mock);
+    await userEvent.click((await screen.findAllByRole("button", { name: "Add project" }))[0]!);
+    const form = screen.getByRole("form", { name: "Add project" });
+    await userEvent.click(within(form).getByRole("radio", { name: /^Laravel/ }));
+    await userEvent.type(within(form).getByLabelText("Name"), "Api");
+    expect(await within(form).findByRole("alert")).toHaveTextContent("Laravel needs PHP");
+    expect(within(form).getByRole("button", { name: "Create Laravel project" })).toBeDisabled();
+  });
+
+  it("runs Composer for a project and turns on missing PHP extensions first", async () => {
+    let missing = ["openssl", "zip"];
+    const mock = createMockAdapter({
+      ...defaultHandlers,
+      list_projects: () => [project()],
+      get_composer_status: () => ({
+        composerVersion: "2.11.2",
+        phpVersion: "8.3.35",
+        phpInstallationId: "i83",
+        missingExtensions: missing,
+        hasComposerJson: true,
+        hasVendor: false,
+        running: false,
+      }),
+      enable_composer_extensions: () => {
+        missing = [];
+        return null;
+      },
+      run_composer: () => "op-c",
+    });
+    await renderApp("/projects/p1", mock);
+    expect(await screen.findByText(/doesn't load openssl, zip/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "composer install" })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Turn them on" }));
+    expect(await screen.findByText(/Turned on openssl, zip/)).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole("button", { name: "composer install" })).toBeEnabled());
+    await userEvent.click(screen.getByRole("button", { name: "composer install" }));
+    expect(mock.calls.find((c) => c.command === "run_composer")?.args).toEqual({
+      projectId: "p1",
+      action: "install",
+    });
   });
 
   it("lists projects calmly, then shows one project's details", async () => {

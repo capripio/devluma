@@ -6,7 +6,7 @@ import { ipc } from "../../lib/ipc";
 import { toAppError, type AppError } from "../../lib/ipc/errors";
 import { formatBytes } from "../../lib/format";
 import { useAsync } from "../../lib/useAsync";
-import type { PackageView, SetupStatus } from "../../types/dto";
+import type { NodePackageManager, PackageView, SetupStatus } from "../../types/dto";
 import { LoadingState } from "../../components/LoadingState";
 
 type Step = "welcome" | "storage" | "stack" | "review" | "running";
@@ -16,19 +16,30 @@ const GROUPS: { title: string; ids: string[]; pickOne?: boolean }[] = [
   { title: "Language runtimes", ids: ["php", "node", "python"] },
   { title: "Web server", ids: ["nginx", "apache", "caddy"], pickOne: true },
   { title: "Database", ids: ["mariadb", "postgresql", "mongodb"] },
-  { title: "Tools", ids: ["mailpit"] },
+  { title: "Tools", ids: ["composer", "mailpit"] },
 ];
 
 const PRESETS: { id: string; label: string; description: string; packages: string[] }[] = [
   {
     id: "php",
     label: "PHP web stack",
-    description: "PHP, Nginx, MariaDB and Mailpit — for Laravel, WordPress, Symfony.",
-    packages: ["php", "nginx", "mariadb", "mailpit"],
+    description: "PHP, Composer, Nginx, MariaDB and Mailpit — for Laravel, WordPress, Symfony.",
+    packages: ["php", "composer", "nginx", "mariadb", "mailpit"],
   },
-  { id: "node", label: "Node.js", description: "Node.js LTS with npm.", packages: ["node"] },
+  {
+    id: "node",
+    label: "Node.js",
+    description: "Node.js LTS with npm; add pnpm or Yarn below.",
+    packages: ["node"],
+  },
   { id: "python", label: "Python", description: "Python with pip and venv.", packages: ["python"] },
   { id: "custom", label: "Choose myself", description: "Pick exactly what to download.", packages: [] },
+];
+
+/** Package managers Node.js can get through its Corepack (`services/node_tools.rs`). */
+const NODE_PACKAGE_MANAGERS: { id: NodePackageManager; label: string }[] = [
+  { id: "pnpm", label: "pnpm" },
+  { id: "yarn", label: "Yarn" },
 ];
 
 const SERVICE_PACKAGES = new Set(["nginx", "apache", "caddy", "mariadb", "postgresql", "mongodb", "mailpit"]);
@@ -48,6 +59,7 @@ export function SetupWizard({ status, onDone }: { status: SetupStatus; onDone: (
   const [step, setStep] = useState<Step>("welcome");
   const [error, setError] = useState<AppError | null>(null);
   const [selected, setSelected] = useState<Record<string, string>>({});
+  const [nodePms, setNodePms] = useState<NodePackageManager[]>([]);
   const [operationId, setOperationId] = useState<string | null>(null);
   const catalog = useAsync(ipc.listPackages);
 
@@ -98,6 +110,8 @@ export function SetupWizard({ status, onDone }: { status: SetupStatus; onDone: (
               packages={catalog.data.packages}
               selected={selected}
               setSelected={setSelected}
+              nodePms={nodePms}
+              setNodePms={setNodePms}
               freeBytes={status.freeBytes}
               onBack={() => setStep("storage")}
               onNext={() => setStep("review")}
@@ -111,12 +125,14 @@ export function SetupWizard({ status, onDone }: { status: SetupStatus; onDone: (
           <Review
             packages={catalog.data.packages}
             selected={selected}
+            nodePms={selected.node ? nodePms : []}
             onBack={() => setStep("stack")}
             onStart={async () => {
               setError(null);
               try {
                 const r = await ipc.runSetup({
                   items: Object.entries(selected).map(([packageId, version]) => ({ packageId, version })),
+                  nodePackageManagers: selected.node ? nodePms : [],
                 });
                 setOperationId(r.operationId);
                 setStep("running");
@@ -295,6 +311,8 @@ function Stack({
   packages,
   selected,
   setSelected,
+  nodePms,
+  setNodePms,
   freeBytes,
   onBack,
   onNext,
@@ -302,6 +320,8 @@ function Stack({
   packages: PackageView[];
   selected: Record<string, string>;
   setSelected: (s: Record<string, string>) => void;
+  nodePms: NodePackageManager[];
+  setNodePms: (pms: NodePackageManager[]) => void;
   freeBytes: number | null;
   onBack: () => void;
   onNext: () => void;
@@ -410,6 +430,29 @@ function Stack({
                   {SERVICE_PACKAGES.has(p.id) && ver && (
                     <span className="text-xs text-fg-muted">A service is created on a free port.</span>
                   )}
+                  {p.id === "node" && ver && (
+                    <fieldset className="flex basis-full flex-wrap items-center gap-3 pl-6">
+                      <legend className="sr-only">Package managers for Node.js</legend>
+                      <span className="text-xs text-fg-muted">Also add:</span>
+                      {NODE_PACKAGE_MANAGERS.map((pm) => (
+                        <label key={pm.id} className="flex items-center gap-1.5">
+                          <input
+                            type="checkbox"
+                            checked={nodePms.includes(pm.id)}
+                            onChange={(e) =>
+                              setNodePms(
+                                e.target.checked ? [...nodePms, pm.id] : nodePms.filter((x) => x !== pm.id),
+                              )
+                            }
+                          />
+                          {pm.label}
+                        </label>
+                      ))}
+                      <span className="text-xs text-fg-muted">
+                        Through Node.js&apos;s Corepack; downloaded from npm the first time you run it.
+                      </span>
+                    </fieldset>
+                  )}
                 </div>
               );
             })}
@@ -442,11 +485,13 @@ function Stack({
 function Review({
   packages,
   selected,
+  nodePms,
   onBack,
   onStart,
 }: {
   packages: PackageView[];
   selected: Record<string, string>;
+  nodePms: NodePackageManager[];
   onBack: () => void;
   onStart: () => Promise<void>;
 }) {
@@ -483,6 +528,13 @@ function Review({
           ))}
         </tbody>
       </table>
+      {nodePms.length > 0 && (
+        <p>
+          Node.js also gets{" "}
+          {nodePms.map((id) => NODE_PACKAGE_MANAGERS.find((pm) => pm.id === id)?.label).join(" and ")}{" "}
+          (Corepack adds the command; the tool itself downloads from npm the first time you run it).
+        </p>
+      )}
       <p className="text-fg-muted">
         Each download is checked against its published SHA-256 before it&apos;s unpacked. Runtimes become the
         default version if you don&apos;t have one yet; web servers, databases and Mailpit get a service on a

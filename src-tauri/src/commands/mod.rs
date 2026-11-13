@@ -2,6 +2,7 @@
 //! Every command added here must also be listed in `build.rs` and granted in a capability.
 
 pub mod app;
+pub mod apps;
 pub mod certificates;
 pub mod config;
 pub mod databases;

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-preview-app-project"
+description = "Enables the preview_app_project command without any pre-configured scope."
+commands.allow = ["preview_app_project"]
+
+[[permission]]
+identifier = "deny-preview-app-project"
+description = "Denies the preview_app_project command without any pre-configured scope."
+commands.deny = ["preview_app_project"]

@@ -48,6 +48,45 @@ const catalog = catalogView([
 ]);
 
 describe("first-run setup", () => {
+  it("adds pnpm and Yarn to Node.js when the user ticks them", async () => {
+    const withNode = catalogView([
+      packageView("node", [versionView("node", "24.21.0", { sizeBytes: 34_000_000 })], {
+        displayName: "Node.js",
+      }),
+    ]);
+    const mock = createMockAdapter({
+      ...defaultHandlers,
+      get_setup_status: () => firstRun(),
+      list_packages: () => withNode,
+      choose_storage: () => ({ restartNeeded: false }),
+      run_setup: () => ({ operationId: "setup-2" }),
+    });
+    await renderApp("/", mock);
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+    await userEvent.click(
+      within(screen.getByRole("region", { name: "Where should Devluma keep everything?" })).getByRole(
+        "button",
+        {
+          name: "Next",
+        },
+      ),
+    );
+    const stack = await screen.findByRole("region", { name: "What do you want to download?" });
+    // Offered only once Node.js is chosen.
+    expect(within(stack).queryByLabelText("pnpm")).not.toBeInTheDocument();
+    await userEvent.click(within(stack).getByRole("checkbox", { name: "Node.js" }));
+    expect(within(stack).getByLabelText("pnpm")).not.toBeChecked();
+    await userEvent.click(within(stack).getByLabelText("pnpm"));
+    await userEvent.click(within(stack).getByRole("button", { name: "Review" }));
+    const review = screen.getByRole("region", { name: "Review" });
+    expect(review).toHaveTextContent("Node.js also gets pnpm");
+    await userEvent.click(within(review).getByRole("button", { name: "Download and set up" }));
+    await waitFor(() =>
+      expect(mock.calls.find((c) => c.command === "run_setup")?.args).toEqual({
+        plan: { items: [{ packageId: "node", version: "24.21.0" }], nodePackageManagers: ["pnpm"] },
+      }),
+    );
+  });
   it("can be skipped, and then the app opens", async () => {
     const mock = createMockAdapter({
       ...defaultHandlers,
@@ -115,6 +154,7 @@ describe("first-run setup", () => {
             { packageId: "mailpit", version: "1.29.2" },
             { packageId: "nginx", version: "1.30.5" },
           ],
+          nodePackageManagers: [],
         },
       }),
     );

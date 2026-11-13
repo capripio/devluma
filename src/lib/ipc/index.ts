@@ -12,8 +12,16 @@ import {
   configViewSchema,
   type ConfigChange,
   type ConfigTarget,
-  projectSchema,
   projectViewSchema,
+  createdProjectSchema,
+  webAppInfoSchema,
+  appPlanSchema,
+  appStartedSchema,
+  composerStatusSchema,
+  nodeToolsSchema,
+  type NodePackageManager,
+  type AppProjectRequest,
+  type NewSiteOptions,
   portStatusSchema,
   startAllSchema,
   operationStartedSchema,
@@ -122,9 +130,23 @@ export const ipc = {
   readConfigBackup: (target: ConfigTarget, file: string, backupId: string) =>
     call("read_config_backup", { target, file, backupId }, z.string()),
   listProjects: () => call("list_projects", undefined, z.array(projectViewSchema)),
-  /** `folder` is relative to the projects folder (`www`); it is created when missing. */
-  createProject: (name: string, folder: string, serviceIds: string[]) =>
-    call("create_project", { name, folder, serviceIds }, projectSchema),
+  /**
+   * `folder` is relative to the projects folder (`www`); it is created when missing. With
+   * `site`, the project's site is created right away (its own `apply_site` operation).
+   */
+  createProject: (name: string, folder: string, serviceIds: string[], site: NewSiteOptions | null = null) =>
+    call("create_project", { name, folder, serviceIds, site }, createdProjectSchema),
+  listWebApps: () => call("list_apps", undefined, z.array(webAppInfoSchema)),
+  previewAppProject: (request: AppProjectRequest) => call("preview_app_project", { request }, appPlanSchema),
+  createAppProject: (request: AppProjectRequest) => call("create_app_project", { request }, appStartedSchema),
+  getComposerStatus: (projectId: string) => call("get_composer_status", { projectId }, composerStatusSchema),
+  runComposer: (projectId: string, action: "install" | "update") =>
+    call("run_composer", { projectId, action }, z.string()),
+  enableComposerExtensions: (projectId: string) =>
+    call("enable_composer_extensions", { projectId }, z.null()),
+  getNodeTools: (installationId: string) => call("get_node_tools", { installationId }, nodeToolsSchema),
+  setNodeTools: (installationId: string, enabled: NodePackageManager[]) =>
+    call("set_node_tools", { installationId, enabled }, nodeToolsSchema),
   setProjectServices: (projectId: string, serviceIds: string[]) =>
     call("set_project_services", { projectId, serviceIds }, z.null()),
   startProjectServices: (projectId: string) => call("start_project_services", { projectId }, startAllSchema),
@@ -150,8 +172,10 @@ export const ipc = {
   getSetupStatus: () => call("get_setup_status", undefined, setupStatusSchema),
   chooseStorage: (folder: string | null) =>
     call("choose_storage", { folder }, z.object({ restartNeeded: z.boolean() })),
-  runSetup: (plan: { items: { packageId: string; version: string }[] }) =>
-    call("run_setup", { plan }, z.object({ operationId: z.string() })),
+  runSetup: (plan: {
+    items: { packageId: string; version: string }[];
+    nodePackageManagers?: NodePackageManager[];
+  }) => call("run_setup", { plan }, z.object({ operationId: z.string() })),
   completeSetup: () => call("complete_setup", undefined, z.null()),
   restartApp: () => call("restart_app", undefined, z.null()),
   reopenSetup: () => call("reopen_setup", undefined, z.null()),

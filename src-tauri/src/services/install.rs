@@ -28,7 +28,8 @@ use super::download::{self, DownloadError, DownloadOptions};
 use super::journal::{Journal, ProgressSink};
 use crate::domain::adapter::AdapterId;
 use crate::domain::catalog::{
-    Architecture, Catalog, CatalogPackage, IntegrityPolicy, VersionManifest, version_row_id,
+    Architecture, ArchiveType, Catalog, CatalogPackage, IntegrityPolicy, VersionManifest,
+    version_row_id,
 };
 use crate::error::{ErrorCode, IpcError};
 use crate::persistence::installations::{self, InstallStatus};
@@ -76,9 +77,22 @@ pub fn probe_output(
 ) -> Result<String, String> {
     if adapter.reads_version_resource() {
         probe.file_version(exe).map(|v| format!("FileVersion {v}"))
+    } else if adapter.reads_file_text() {
+        read_text_capped(exe)
     } else {
         probe.run(exe, adapter.version_probe().args)
     }
+}
+
+/// The file's text for adapters that read their version from it (lossy UTF-8, at most
+/// 16 MiB: composer.phar is about 4 MB).
+fn read_text_capped(path: &Path) -> Result<String, String> {
+    use std::io::Read;
+    let mut bytes = Vec::new();
+    std::fs::File::open(path)
+        .and_then(|f| f.take(16 * 1_048_576).read_to_end(&mut bytes))
+        .map_err(|e| e.to_string())?;
+    Ok(String::from_utf8_lossy(&bytes).into_owned())
 }
 
 #[derive(Clone)]
@@ -447,7 +461,7 @@ async fn pipeline(
     })?;
 
     // 3. Download
-    let archive_path = staging.join("download.zip");
+    let archive_path = staging.join("download");
     let mut last_emit = Instant::now() - Duration::from_secs(1);
     let mut last_pct = u64::MAX;
     let downloaded = download::download(
@@ -499,14 +513,29 @@ async fn pipeline(
     journal.progress(op_id, "Extracting", None, None)?;
     let extract_dir = staging.join("extract");
     let limits = ExtractLimits::for_archive(size, version.source.strip_components);
-    let (archive_clone, extract_clone, flag_clone) =
-        (archive_path.clone(), extract_dir.clone(), flag.clone());
-    tauri::async_runtime::spawn_blocking(move || {
-        archive::extract_zip(&archive_clone, &extract_clone, limits, &flag_clone)
-    })
-    .await
-    .map_err(|_| fail(ErrorCode::Internal, "Extraction stopped unexpectedly."))?
-    .map_err(extract_failure)?;
+    match version.source.archive {
+        ArchiveType::Zip => {
+            let (archive_clone, extract_clone, flag_clone) =
+                (archive_path.clone(), extract_dir.clone(), flag.clone());
+            tauri::async_runtime::spawn_blocking(move || {
+                archive::extract_zip(&archive_clone, &extract_clone, limits, &flag_clone)
+            })
+            .await
+            .map_err(|_| fail(ErrorCode::Internal, "Extraction stopped unexpectedly."))?
+            .map_err(extract_failure)?;
+        }
+        // The download is the file: the catalog names it (validated: a plain file name).
+        ArchiveType::File => {
+            let name = &version.executables[0].path;
+            std::fs::create_dir_all(&extract_dir)
+                .and_then(|()| std::fs::rename(&archive_path, extract_dir.join(name)))
+                .map_err(|e| io_failure("saving the download", e))?;
+        }
+    }
+    if pkg.adapter == AdapterId::Composer {
+        super::composer::write_shim(&extract_dir)
+            .map_err(|e| io_failure("creating the composer command", e))?;
+    }
     check_cancel()?;
 
     // 6. Verify executables using the adapter's fixed probe.
@@ -582,7 +611,7 @@ pub(crate) fn persist_catalog_rows(
             publisher_signature_url: None,
             sha256: Some(v.integrity.sha256.clone()),
             integrity_policy: v.integrity.policy.as_str().into(),
-            archive_type: "zip".into(),
+            archive_type: v.source.archive.as_str().into(),
             expected_size_bytes: Some(v.source.size_bytes as i64),
             release_date: v.release_date.clone(),
             end_of_life_date: v.end_of_life_date.clone(),

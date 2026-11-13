@@ -566,6 +566,44 @@ impl DatabaseService {
         self.tools(&svc, engine)?.list_databases()
     }
 
+    /// Creates an empty database (MariaDB: utf8mb4) for a new project. Refuses a name that
+    /// exists already, so nothing is ever reused or replaced.
+    pub fn create_database(&self, service_id: &str, name: &str) -> Result<(), Failure> {
+        check_db_name(name)?;
+        let (svc, engine) = self.database_service(service_id)?;
+        Self::require_running(&svc)?;
+        let tools = self.tools(&svc, engine)?;
+        if tools
+            .list_databases()?
+            .iter()
+            .any(|d| d.eq_ignore_ascii_case(name))
+        {
+            return Err(invalid(format!(
+                "{} already has a database named {name}.",
+                svc.instance_name
+            )));
+        }
+        let statement = match engine {
+            Engine::Mariadb => format!(
+                "CREATE DATABASE {} CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci",
+                tools.quoted(name)
+            ),
+            Engine::Postgresql => format!("CREATE DATABASE {}", tools.quoted(name)),
+            Engine::Mongodb => return Err(invalid("MongoDB creates databases on first use.")),
+        };
+        tools.sql(None, &statement).map(|_| ())
+    }
+
+    /// Drops a database this run created moments ago (undo after a failed app install).
+    pub fn drop_new_database(&self, service_id: &str, name: &str) -> Result<(), Failure> {
+        check_db_name(name)?;
+        let (svc, engine) = self.database_service(service_id)?;
+        let tools = self.tools(&svc, engine)?;
+        tools
+            .sql(None, &format!("DROP DATABASE {}", tools.quoted(name)))
+            .map(|_| ())
+    }
+
     pub fn backups(&self) -> Result<Vec<BackupRecord>, Failure> {
         self.db.read(backups::list).map_err(db_fail)
     }

@@ -56,6 +56,8 @@ pub enum Category {
     Mail,
     Tunnel,
     Tool,
+    /// A web application copied into new projects (WordPress); never run by Devluma.
+    Application,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -136,6 +138,18 @@ pub struct Source {
 #[serde(rename_all = "snake_case")]
 pub enum ArchiveType {
     Zip,
+    /// The download is the file itself (e.g. `composer.phar`), saved under the name of the
+    /// version's single executable entry.
+    File,
+}
+
+impl ArchiveType {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Zip => "zip",
+            Self::File => "file",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -336,7 +350,7 @@ fn validate(doc: CatalogDocument, opts: ValidationOptions) -> Catalog {
         let mut versions = Vec::new();
         let mut seen_versions = HashSet::new();
         for v in &pkg.versions {
-            match validate_version(&pkg, v, opts) {
+            match validate_version(&pkg, adapter, v, opts) {
                 Ok(()) if !seen_versions.insert((v.version.clone(), v.architecture)) => issues
                     .push(CatalogIssue {
                         package_id: Some(pkg.id.clone()),
@@ -423,6 +437,7 @@ fn validate(doc: CatalogDocument, opts: ValidationOptions) -> Catalog {
 
 fn validate_version(
     pkg: &PackageManifest,
+    adapter: AdapterId,
     v: &VersionManifest,
     opts: ValidationOptions,
 ) -> Result<(), String> {
@@ -464,8 +479,18 @@ fn validate_version(
     if v.executables.is_empty() {
         return Err("At least one executable must be listed for verification.".into());
     }
+    if v.source.archive == ArchiveType::File
+        && (v.executables.len() != 1
+            || v.executables[0].path.contains(['/', '\\'])
+            || v.source.strip_components != 0)
+    {
+        return Err(
+            "A single-file download lists exactly one file, by its name, and strips nothing."
+                .into(),
+        );
+    }
     for exe in &v.executables {
-        validate_relative_exe(&exe.path)?;
+        validate_relative_exe(&exe.path, adapter.reads_file_text())?;
         if exe.expected_version.trim().is_empty() {
             return Err("Executable expectedVersion is required.".into());
         }
@@ -479,7 +504,8 @@ fn validate_version(
 }
 
 /// Executable paths are data from the catalog: keep them strictly inside the install root.
-fn validate_relative_exe(path: &str) -> Result<(), String> {
+/// Adapters that only read their file (never run it) may list any file type.
+fn validate_relative_exe(path: &str, any_file: bool) -> Result<(), String> {
     let normalized = path.replace('\\', "/");
     let bad = normalized.is_empty()
         || normalized.starts_with('/')
@@ -487,7 +513,7 @@ fn validate_relative_exe(path: &str) -> Result<(), String> {
         || normalized
             .split('/')
             .any(|seg| seg.is_empty() || seg == "." || seg == "..")
-        || !normalized.to_ascii_lowercase().ends_with(".exe");
+        || (!any_file && !normalized.to_ascii_lowercase().ends_with(".exe"));
     if bad {
         return Err(format!(
             "Executable path \"{path}\" must be a relative .exe path inside the package."

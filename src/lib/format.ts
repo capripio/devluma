@@ -20,4 +20,5 @@ export const CATEGORY_LABELS: Record<PackageCategory, string> = {
   mail: "Mail",
   tunnel: "Tunnel",
   tool: "Tool",
+  application: "Application",
 };

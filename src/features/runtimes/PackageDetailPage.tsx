@@ -14,6 +14,7 @@ import { CATEGORY_LABELS, formatBytes } from "../../lib/format";
 import { useAsync } from "../../lib/useAsync";
 import type { OperationProgress, PackageView, VersionView } from "../../types/dto";
 import { INSTALL_OPERATION } from "./packages";
+import { NodePackageManagers } from "./NodePackageManagers";
 import { UninstallDialog } from "./UninstallDialog";
 import { RuntimeSwitchDialog } from "./RuntimeSwitchDialog";
 import { LoadingState } from "../../components/LoadingState";
@@ -64,6 +65,7 @@ export function PackageDetailPage() {
       <PageHeader title={pkg.displayName} description={pkg.description ?? undefined} />
       <PackageFacts pkg={pkg} />
       <VersionsTable pkg={pkg} onChanged={catalog.refresh} />
+      {pkg.id === "node" && <NodePackageManagers pkg={pkg} />}
     </>
   );
 }
@@ -234,7 +236,7 @@ function VersionRow({
           />
         ) : status === "installed" && v.installation ? (
           <div className="flex flex-wrap gap-2">
-            {!v.installation.isGlobalDefault && (
+            {!v.installation.isGlobalDefault && pkg.category !== "application" && (
               <Button onClick={onMakeDefault} aria-label={`Make ${pkg.displayName} ${v.version} the default`}>
                 Make default
               </Button>

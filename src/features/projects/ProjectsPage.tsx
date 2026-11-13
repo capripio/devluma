@@ -19,15 +19,16 @@ import { OpenTerminalButton } from "../terminal/OpenTerminalButton";
 import { AddProjectForm } from "./AddProjectForm";
 import { ProjectDetail } from "./ProjectDetail";
 
-const SITE_OPERATIONS = new Set(["apply_site", "remove_site"]);
+const SITE_OPERATIONS = new Set(["apply_site", "remove_site", "create_app_project"]);
 const LIVE = new Set(["starting", "running", "degraded"]);
 
-/** Navigation state: open the Add form, or hand a new project straight on to its site. */
+/** Navigation state: open the Add form, or show a just-added project. */
 interface ProjectsState {
   adding?: boolean;
   /** The project was just created; the list may not include it yet. */
   justAdded?: boolean;
-  siteDomain?: string;
+  /** What happened with its site ("Creating shop.test…"). */
+  note?: string;
 }
 
 /** Projects: the list on the left, the overview or one project on the right. */
@@ -68,7 +69,7 @@ export function ProjectsPage() {
         project={project}
         sites={sitesOf(project)}
         services={serviceList}
-        initialSiteDomain={state.siteDomain}
+        initialNote={state.note}
         onChanged={projects.refresh}
       />
     );
@@ -81,11 +82,10 @@ export function ProjectsPage() {
         services={serviceList}
         adding={Boolean(state.adding)}
         setAdding={(adding) => navigate("/projects", { replace: true, state: { adding } })}
-        onAdded={(id, domain) => {
+        onAdded={(id, note) => {
           projects.refresh();
-          navigate(`/projects/${id}`, {
-            state: { justAdded: true, ...(domain ? { siteDomain: domain } : {}) },
-          });
+          sites.refresh();
+          navigate(`/projects/${id}`, { state: { justAdded: true, ...(note ? { note } : {}) } });
         }}
       />
     );
@@ -172,7 +172,7 @@ function ProjectsOverview({
   services: ServiceView[];
   adding: boolean;
   setAdding: (adding: boolean) => void;
-  onAdded: (projectId: string, domain: string | null) => void;
+  onAdded: (projectId: string, note: string | null) => void;
 }) {
   const [note, setNote] = useState<string | null>(null);
   const openSite = (s: SiteView) => {
@@ -195,9 +195,7 @@ function ProjectsOverview({
         {addButton}
         <OpenTerminalButton />
       </Commands>
-      {adding && (
-        <AddProjectForm onCancel={() => setAdding(false)} onAdded={(p, domain) => onAdded(p.id, domain)} />
-      )}
+      {adding && <AddProjectForm onCancel={() => setAdding(false)} onAdded={onAdded} />}
       {note && (
         <p aria-live="polite" className="text-sm text-fg-muted">
           {note}

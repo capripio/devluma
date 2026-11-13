@@ -82,17 +82,47 @@ pub async fn list_projects(state: State<'_, AppState>) -> IpcResult<Vec<ProjectV
     .await
 }
 
-/// Adds `www\<folder>` as a project, creating the folder when it doesn't exist yet.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreatedProject {
+    pub project: Project,
+    /// The site's `apply_site` operation, when a site was requested and started.
+    pub site_operation_id: Option<String>,
+    /// Why the site couldn't be started; the project exists either way.
+    pub site_error: Option<String>,
+}
+
+/// Adds `www\<folder>` as a project, creating the folder when it doesn't exist yet, and
+/// starts creating its site when `site` is given (ADR 0020).
 #[tauri::command]
 pub async fn create_project(
     state: State<'_, AppState>,
     name: String,
     folder: String,
     service_ids: Vec<String>,
-) -> IpcResult<Project> {
+    site: Option<crate::services::projects::SiteOptions>,
+) -> IpcResult<CreatedProject> {
     let (db, paths) = (state.db()?, state.paths.clone());
-    blocking(move || crate::services::projects::create(&db, &paths, &name, &folder, &service_ids))
-        .await
+    let sites = match site {
+        Some(_) => Some(state.sites()?),
+        None => None,
+    };
+    blocking(move || {
+        let project = crate::services::projects::create(&db, &paths, &name, &folder, &service_ids)?;
+        let (mut site_operation_id, mut site_error) = (None, None);
+        if let (Some(opts), Some(sites)) = (site, sites) {
+            match crate::services::projects::create_site(&db, &sites, &project, &opts) {
+                Ok(id) => site_operation_id = Some(id),
+                Err(e) => site_error = Some(e.message),
+            }
+        }
+        Ok(CreatedProject {
+            project,
+            site_operation_id,
+            site_error,
+        })
+    })
+    .await
 }
 
 /// Replaces the services a project uses.

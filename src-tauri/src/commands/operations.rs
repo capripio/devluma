@@ -23,7 +23,7 @@ pub async fn list_operations(state: State<'_, AppState>) -> IpcResult<Vec<Operat
 /// it has stopped and cleaned up.
 #[tauri::command]
 pub fn cancel_operation(state: State<'_, AppState>, operation_id: String) -> IpcResult<()> {
-    if state.installs.cancel(&operation_id) {
+    if state.installs.cancel(&operation_id) || state.tasks.cancel(&operation_id) {
         Ok(())
     } else {
         Err(IpcError::new(
