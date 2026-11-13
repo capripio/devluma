@@ -57,7 +57,11 @@ function Catalog({ view }: { view: CatalogView }) {
     (category === "all" || p.category === category) &&
     (arch === "all" || p.versions.some((v) => v.architecture === arch)) &&
     (installState === "all" || installedVersions(p).length > 0 === (installState === "installed"));
-  const filtered = view.packages.filter(matches);
+  // Web apps (WordPress) belong to projects: the web installer on the Projects page puts them
+  // there. One is listed here only if Devluma 0.5.0 installed it into bin, so it can be removed.
+  const filtered = view.packages
+    .filter((p) => p.category !== "application" || installedVersions(p).length > 0)
+    .filter(matches);
   const clear = () => {
     setQuery("");
     setCategory("all");
@@ -84,7 +88,7 @@ function Catalog({ view }: { view: CatalogView }) {
           <span className="text-fg-muted">Category</span>
           <select value={category} onChange={(e) => setCategory(e.target.value)} className={selectClass}>
             <option value="all">All categories</option>
-            {PACKAGE_CATEGORIES.map((c) => (
+            {PACKAGE_CATEGORIES.filter((c) => c !== "application").map((c) => (
               <option key={c} value={c}>
                 {CATEGORY_LABELS[c]}
               </option>

@@ -84,3 +84,17 @@ pub async fn set_node_tools(
     blocking(move || crate::services::node_tools::set(&db, &paths, &installation_id, &enabled))
         .await
 }
+
+/// Releases of an app to choose from (WordPress: the catalog; Laravel/Symfony: packagist.org).
+/// `project_id`: judge PHP support by that project's PHP instead of the default.
+#[tauri::command]
+pub async fn list_app_versions(
+    state: State<'_, AppState>,
+    app: crate::services::apps::App,
+    project_id: Option<String>,
+) -> IpcResult<crate::services::apps::AppVersions> {
+    let apps = state.apps()?;
+    let a2 = std::sync::Arc::clone(&apps);
+    let php = blocking(move || Ok(a2.php_for(project_id.as_deref()))).await?;
+    Ok(apps.versions(app, php).await)
+}

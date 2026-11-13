@@ -1,4 +1,4 @@
-import { ExternalLink, FolderGit2, Plus } from "lucide-react";
+import { Download, ExternalLink, FolderGit2, Plus } from "lucide-react";
 import { useState } from "react";
 import { Link, NavLink, useLocation, useNavigate, useParams } from "react-router";
 import { Commands } from "../../app/commandBar";
@@ -17,6 +17,7 @@ import { projectInks } from "../overview/stackMapLayout";
 import { useServices } from "../services/useServices";
 import { OpenTerminalButton } from "../terminal/OpenTerminalButton";
 import { AddProjectForm } from "./AddProjectForm";
+import { WebAppInstaller } from "./WebAppInstaller";
 import { ProjectDetail } from "./ProjectDetail";
 
 const SITE_OPERATIONS = new Set(["apply_site", "remove_site", "create_app_project"]);
@@ -25,6 +26,8 @@ const LIVE = new Set(["starting", "running", "degraded"]);
 /** Navigation state: open the Add form, or show a just-added project. */
 interface ProjectsState {
   adding?: boolean;
+  /** Open the web installer (WordPress, Laravel, Symfony) for a new project. */
+  installing?: boolean;
   /** The project was just created; the list may not include it yet. */
   justAdded?: boolean;
   /** What happened with its site ("Creating shop.test…"). */
@@ -82,6 +85,8 @@ export function ProjectsPage() {
         services={serviceList}
         adding={Boolean(state.adding)}
         setAdding={(adding) => navigate("/projects", { replace: true, state: { adding } })}
+        installing={Boolean(state.installing)}
+        setInstalling={(installing) => navigate("/projects", { replace: true, state: { installing } })}
         onAdded={(id, note) => {
           projects.refresh();
           sites.refresh();
@@ -164,6 +169,8 @@ function ProjectsOverview({
   services,
   adding,
   setAdding,
+  installing,
+  setInstalling,
   onAdded,
 }: {
   projects: ProjectView[];
@@ -172,6 +179,8 @@ function ProjectsOverview({
   services: ServiceView[];
   adding: boolean;
   setAdding: (adding: boolean) => void;
+  installing: boolean;
+  setInstalling: (installing: boolean) => void;
   onAdded: (projectId: string, note: string | null) => void;
 }) {
   const [note, setNote] = useState<string | null>(null);
@@ -183,8 +192,14 @@ function ProjectsOverview({
     );
   };
   const addButton = (
-    <Button variant="primary" onClick={() => setAdding(true)} disabled={adding}>
+    <Button variant="primary" onClick={() => setAdding(true)} disabled={adding || installing}>
       Add project
+    </Button>
+  );
+  const installButton = (
+    <Button onClick={() => setInstalling(true)} disabled={adding || installing}>
+      <Download aria-hidden className="size-4" />
+      Install web app
     </Button>
   );
 
@@ -193,21 +208,31 @@ function ProjectsOverview({
       <PageHeader title="Projects" description="Your projects in the www folder." />
       <Commands>
         {addButton}
+        {installButton}
         <OpenTerminalButton />
       </Commands>
       {adding && <AddProjectForm onCancel={() => setAdding(false)} onAdded={onAdded} />}
+      {installing && (
+        <WebAppInstaller onCancel={() => setInstalling(false)} onDone={(id) => onAdded(id, null)} />
+      )}
       {note && (
         <p aria-live="polite" className="text-sm text-fg-muted">
           {note}
         </p>
       )}
       {projects.length === 0 ? (
-        !adding && (
+        !adding &&
+        !installing && (
           <EmptyState
             icon={FolderGit2}
             title="No projects yet"
             description="Add one to get a folder in www, a local domain and its own PHP version."
-            action={addButton}
+            action={
+              <span className="flex gap-2">
+                {addButton}
+                {installButton}
+              </span>
+            }
           />
         )
       ) : (

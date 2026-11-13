@@ -217,6 +217,13 @@ fn preflight<'c>(
             old = version.version,
         )));
     }
+    // Web apps (WordPress) go into a project through the web installer, never into bin.
+    if pkg.manifest.category == crate::domain::catalog::Category::Application {
+        return Err(invalid(format!(
+            "{} is installed into a project from the web installer on the Projects page.",
+            pkg.manifest.display_name
+        )));
+    }
     if !version.architecture.runs_on_host() {
         return Err(invalid(format!(
             "{} {} is built for {}, which this computer can't run.",

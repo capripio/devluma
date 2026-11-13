@@ -61,6 +61,20 @@ describe("runtimes catalog", () => {
     expect(await axeViolations(container)).toEqual([]);
   });
 
+  it("keeps web apps out of the package list; they're installed into projects", async () => {
+    const wp = packageView("wordpress", [versionView("wordpress", "7.1.4")], {
+      displayName: "WordPress",
+      category: "application",
+    });
+    await renderApp("/runtimes", withCatalog(catalogView([php, wp])));
+    const table = await screen.findByRole("table");
+    expect(within(table).getByRole("link", { name: "PHP" })).toBeInTheDocument();
+    expect(within(table).queryByRole("link", { name: "WordPress" })).not.toBeInTheDocument();
+    expect(
+      within(screen.getByLabelText("Category")).queryByRole("option", { name: "Application" }),
+    ).toBeNull();
+  });
+
   it("doesn't offer a default for an application package", async () => {
     const wp = packageView(
       "wordpress",

@@ -288,6 +288,8 @@ pub struct Detection {
     /// `Scripts` folder of a Python virtual environment in the project (`.venv` or `venv`),
     /// put first on PATH in project terminals.
     pub virtual_env_scripts: Option<String>,
+    /// The folder exists and has nothing in it (a web app can be installed into it).
+    pub empty: bool,
 }
 
 /// A Python virtual environment inside the project, found by its layout only.
@@ -330,6 +332,7 @@ pub fn detect(root: &Path) -> Detection {
         label,
         suggested_document_root: docroot.display().to_string(),
         virtual_env_scripts: virtual_env_scripts(root).map(|p| p.display().to_string()),
+        empty: std::fs::read_dir(root).is_ok_and(|mut d| d.next().is_none()),
     }
 }
 
@@ -347,8 +350,10 @@ mod tests {
             std::fs::write(p, "").unwrap();
         };
         assert_eq!(detect(dir.path()).kind, None);
+        assert!(detect(dir.path()).empty);
         touch("index.html");
         assert_eq!(detect(dir.path()).kind, Some("static"));
+        assert!(!detect(dir.path()).empty);
         touch("composer.json");
         assert_eq!(detect(dir.path()).kind, Some("php"));
         touch("public/index.php");

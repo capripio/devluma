@@ -45,6 +45,7 @@ fn main() {
                 "enable_composer_extensions",
                 "get_node_tools",
                 "set_node_tools",
+                "list_app_versions",
                 "remove_project",
                 "open_project_terminal",
                 "open_project_folder",

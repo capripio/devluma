@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
-  "catalogVersion": "2026.11.4",
+  "catalogVersion": "2026.11.5",
   "packages": [
     {
       "id": "php",
@@ -1048,6 +1048,46 @@
             {
               "path": "wp-includes/version.php",
               "expectedVersion": "7.1.4"
+            }
+          ]
+        },
+        {
+          "version": "7.0.8",
+          "architecture": "x64",
+          "source": {
+            "url": "https://wordpress.org/wordpress-7.0.8.zip",
+            "archive": "zip",
+            "sizeBytes": 31434502,
+            "stripComponents": 1
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "0c67b8c0af90cc77787f1e48ed32e33353d6775a20d4c892b5654afd52445284"
+          },
+          "executables": [
+            {
+              "path": "wp-includes/version.php",
+              "expectedVersion": "7.0.8"
+            }
+          ]
+        },
+        {
+          "version": "6.9.11",
+          "architecture": "x64",
+          "source": {
+            "url": "https://wordpress.org/wordpress-6.9.11.zip",
+            "archive": "zip",
+            "sizeBytes": 28685964,
+            "stripComponents": 1
+          },
+          "integrity": {
+            "policy": "sha256-required",
+            "sha256": "0173af3897117cee7fb67036e7b1e8a350fe4d8bf7b5ccd3f467aa7f8c6317bb"
+          },
+          "executables": [
+            {
+              "path": "wp-includes/version.php",
+              "expectedVersion": "6.9.11"
             }
           ]
         }

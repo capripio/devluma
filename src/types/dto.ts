@@ -301,6 +301,8 @@ export const projectViewSchema = projectSchema.extend({
     label: z.string(),
     suggestedDocumentRoot: z.string(),
     virtualEnvScripts: z.string().nullable(),
+    /** The folder exists and is empty: a web app can be installed into it. */
+    empty: z.boolean().optional(),
   }),
   runtimes: z.array(
     z.object({
@@ -358,7 +360,26 @@ export interface AppProjectRequest {
   serviceIds: string[];
   site?: NewSiteOptions;
   databaseServiceId?: string;
+  /** WordPress: a catalog version ("7.1.4"); Laravel/Symfony: a release line ("13.*"). */
+  version?: string;
+  /** Install into this existing (empty) project instead of a new one. */
+  projectId?: string;
 }
+export const appVersionsSchema = z.object({
+  app: z.enum(WEB_APPS),
+  versions: z.array(
+    z.object({
+      value: z.string(),
+      label: z.string(),
+      latest: z.string(),
+      minPhp: z.string().nullable(),
+      supported: z.boolean(),
+    }),
+  ),
+  source: z.string(),
+  unavailable: z.string().nullable(),
+});
+export type AppVersions = z.infer<typeof appVersionsSchema>;
 export const appPlanSchema = z.object({
   app: z.enum(WEB_APPS),
   label: z.string(),

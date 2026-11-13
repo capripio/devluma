@@ -1,4 +1,4 @@
-import { ExternalLink, FolderOpen, ListChecks, Plus, Trash2 } from "lucide-react";
+import { Download, ExternalLink, FolderOpen, ListChecks, Plus, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Commands } from "../../app/commandBar";
@@ -16,6 +16,7 @@ import { SiteForm } from "../sites/SiteForm";
 import { terminalOpenedMessage } from "../terminal/terminal";
 import { ChooseServicesForm, ProjectServiceList, startAllSummary } from "./ProjectServices";
 import { ComposerRow } from "./ComposerRow";
+import { WebAppInstaller } from "./WebAppInstaller";
 
 /** Projects Composer is offered for (composer.json alone counts as "php"). */
 const PHP_KINDS = new Set(["laravel", "symfony", "wordpress", "php"]);
@@ -39,7 +40,7 @@ export function ProjectDetail({
   onChanged: () => void;
 }) {
   const navigate = useNavigate();
-  const [panel, setPanel] = useState<"services" | "site" | null>(null);
+  const [panel, setPanel] = useState<"services" | "site" | "app" | null>(null);
   const [changing, setChanging] = useState<string | null>(null);
   const [removing, setRemoving] = useState(false);
   // Result of the last action, read out politely.
@@ -182,6 +183,30 @@ export function ProjectDetail({
       </dl>
 
       {p.detection.kind === "python" && <VenvHint project={p} />}
+
+      {p.detection.empty && panel !== "app" && (
+        <section
+          aria-label="Empty project folder"
+          className="flex flex-wrap items-center gap-3 rounded-md border border-border p-3 text-sm"
+        >
+          <p className="text-fg-muted">This project&apos;s folder is empty.</p>
+          <Button onClick={() => setPanel("app")}>
+            <Download aria-hidden className="size-4" />
+            Install WordPress, Laravel or Symfony here
+          </Button>
+        </section>
+      )}
+      {panel === "app" && (
+        <WebAppInstaller
+          project={p}
+          hasSite={sites.length > 0}
+          onCancel={() => setPanel(null)}
+          onDone={() => {
+            setPanel(null);
+            onChanged();
+          }}
+        />
+      )}
 
       {panel === "services" && (
         <ChooseServicesForm

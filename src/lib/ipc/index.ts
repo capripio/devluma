@@ -16,6 +16,8 @@ import {
   createdProjectSchema,
   webAppInfoSchema,
   appPlanSchema,
+  appVersionsSchema,
+  type WebApp,
   appStartedSchema,
   composerStatusSchema,
   nodeToolsSchema,
@@ -137,6 +139,8 @@ export const ipc = {
   createProject: (name: string, folder: string, serviceIds: string[], site: NewSiteOptions | null = null) =>
     call("create_project", { name, folder, serviceIds, site }, createdProjectSchema),
   listWebApps: () => call("list_apps", undefined, z.array(webAppInfoSchema)),
+  listAppVersions: (app: WebApp, projectId: string | null = null) =>
+    call("list_app_versions", { app, projectId }, appVersionsSchema),
   previewAppProject: (request: AppProjectRequest) => call("preview_app_project", { request }, appPlanSchema),
   createAppProject: (request: AppProjectRequest) => call("create_app_project", { request }, appStartedSchema),
   getComposerStatus: (projectId: string) => call("get_composer_status", { projectId }, composerStatusSchema),

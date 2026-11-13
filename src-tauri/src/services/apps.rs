@@ -89,14 +89,6 @@ impl App {
             Self::Laravel | Self::Symfony => (8, 2),
         }
     }
-
-    /// Package the app is built from: the WordPress release, or Composer.
-    fn package_id(self) -> &'static str {
-        match self {
-            Self::Wordpress => "wordpress",
-            Self::Laravel | Self::Symfony => composer::PACKAGE_ID,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -113,6 +105,42 @@ pub struct AppProjectRequest {
     /// WordPress: database server to create the project's database on (must be running).
     #[serde(default)]
     pub database_service_id: Option<String>,
+    /// Which release: a catalog version for WordPress ("7.1.4"), a release line for
+    /// Composer apps ("13.*", "7.4.*"). `None` = the newest that fits.
+    #[serde(default)]
+    pub version: Option<String>,
+    /// Install into this existing project (its folder must be empty) instead of a new one;
+    /// `name` and `folder` are then ignored.
+    #[serde(default)]
+    pub project_id: Option<String>,
+}
+
+/// One release a user can pick in the installer.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppVersion {
+    /// What goes into the request's `version`.
+    pub value: String,
+    /// "Laravel 13.x", "Symfony 7.4 LTS", "WordPress 7.1.4".
+    pub label: String,
+    /// The release that's installed for this choice right now.
+    pub latest: String,
+    /// Lowest PHP it accepts ("8.3"), when known.
+    pub min_php: Option<String>,
+    /// The default PHP is new enough.
+    pub supported: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppVersions {
+    pub app: App,
+    /// Newest first.
+    pub versions: Vec<AppVersion>,
+    /// Where the list comes from ("Devluma's catalog", "packagist.org").
+    pub source: String,
+    /// Why no list could be read (the newest compatible release is used then).
+    pub unavailable: Option<String>,
 }
 
 /// What creating the project will do, for the form. Changes nothing.
@@ -160,6 +188,110 @@ struct Resolved {
     downloads: Vec<Download>,
     enable_extensions: Vec<String>,
     database: Option<(String, String, u16)>,
+    /// The project to install into, when it exists already.
+    existing: Option<crate::persistence::projects::Project>,
+    /// Composer apps: the release line passed to `create-project` ("13.*").
+    composer_version: Option<String>,
+    /// WordPress: the catalog release downloaded into this project (pinned SHA-256).
+    wordpress: Option<VersionManifest>,
+}
+
+/// Whether two paths are on the same drive (a rename between them is possible).
+fn same_volume(a: &Path, b: &Path) -> bool {
+    let prefix = |p: &Path| match p.components().next() {
+        Some(std::path::Component::Prefix(x)) => {
+            Some(x.as_os_str().to_string_lossy().to_ascii_lowercase())
+        }
+        _ => None,
+    };
+    prefix(a) == prefix(b)
+}
+
+/// "8.3" from a PHP constraint such as `^8.3`, `>=8.4` or `^8.2|^8.3` (the lowest).
+pub fn min_php_of(constraint: &str) -> Option<(u64, u64)> {
+    let re = regex::Regex::new(r"(\d+)\.(\d+)").ok()?;
+    constraint
+        .split('|')
+        .filter_map(|alt| {
+            re.captures(alt)
+                .map(|c| (c[1].parse().unwrap_or(0), c[2].parse().unwrap_or(0)))
+        })
+        .min()
+}
+
+/// A release line Composer accepts as the version argument: "13.*" or "7.4.*".
+fn valid_line(spec: &str) -> bool {
+    regex::Regex::new(r"^\d{1,3}(\.\d{1,3})?\.\*$")
+        .map(|re| re.is_match(spec))
+        .unwrap_or(false)
+}
+
+/// Release lines from packagist.org's `p2/<package>.json` (Composer 2 "minified" format:
+/// each version repeats only the fields that changed). Laravel lines are majors ("13.x"),
+/// Symfony lines minors ("7.4", with LTS marked). Newest first, at most `max`.
+pub fn release_lines(json: &str, app: App, php: (u64, u64), max: usize) -> Vec<AppVersion> {
+    let Ok(doc) = serde_json::from_str::<serde_json::Value>(json) else {
+        return Vec::new();
+    };
+    let Some(pkg) = app.composer_package() else {
+        return Vec::new();
+    };
+    let Some(list) = doc["packages"][pkg].as_array() else {
+        return Vec::new();
+    };
+    let mut require_php: Option<String> = None;
+    let mut lines: Vec<AppVersion> = Vec::new();
+    for entry in list {
+        // Minified: `require` carries over from the previous entry unless replaced.
+        match &entry["require"] {
+            serde_json::Value::Object(r) => {
+                require_php = r.get("php").and_then(|v| v.as_str()).map(str::to_owned);
+            }
+            serde_json::Value::String(s) if s == "__unset" => require_php = None,
+            _ => {}
+        }
+        let Some(norm) = entry["version_normalized"].as_str() else {
+            continue;
+        };
+        let parts: Vec<u64> = norm.split('.').map_while(|p| p.parse().ok()).collect();
+        if parts.len() < 3 || norm.contains('-') {
+            continue; // not a stable release
+        }
+        let (value, label) = match app {
+            App::Symfony => (
+                format!("{}.{}.*", parts[0], parts[1]),
+                format!(
+                    "Symfony {}.{}{}",
+                    parts[0],
+                    parts[1],
+                    if parts[1] == 4 { " LTS" } else { "" }
+                ),
+            ),
+            _ => (
+                format!("{}.*", parts[0]),
+                format!("{} {}.x", app.label(), parts[0]),
+            ),
+        };
+        if lines.iter().any(|l| l.value == value) {
+            continue; // the newest of each line comes first in the file
+        }
+        let min = require_php.as_deref().and_then(min_php_of);
+        lines.push(AppVersion {
+            value,
+            label,
+            latest: entry["version"]
+                .as_str()
+                .unwrap_or(norm)
+                .trim_start_matches('v')
+                .to_owned(),
+            min_php: min.map(|(a, b)| format!("{a}.{b}")),
+            supported: min.is_none_or(|m| php >= m),
+        });
+        if lines.len() == max {
+            break;
+        }
+    }
+    lines
 }
 
 pub struct AppsService {
@@ -275,25 +407,6 @@ pub fn wp_config(
     Ok(Some(text))
 }
 
-/// Copies a folder tree (regular files and folders only).
-fn copy_tree(from: &Path, to: &Path, cancel: &AtomicBool) -> std::io::Result<()> {
-    std::fs::create_dir_all(to)?;
-    for entry in std::fs::read_dir(from)? {
-        if cancel.load(Ordering::SeqCst) {
-            return Err(std::io::Error::other("cancelled"));
-        }
-        let entry = entry?;
-        let kind = entry.file_type()?;
-        let dest = to.join(entry.file_name());
-        if kind.is_dir() {
-            copy_tree(&entry.path(), &dest, cancel)?;
-        } else if kind.is_file() {
-            std::fs::copy(entry.path(), &dest)?;
-        }
-    }
-    Ok(())
-}
-
 impl AppsService {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -324,12 +437,31 @@ impl AppsService {
 
     fn resolve(&self, req: &AppProjectRequest) -> Result<Resolved, IpcError> {
         let app = req.app;
-        if req.name.trim().is_empty() {
-            return Err(invalid("Enter a project name."));
-        }
-        let target = projects::project_dir(&req.folder, &self.paths)?;
+        let existing = match &req.project_id {
+            Some(id) => Some(
+                self.db
+                    .read(|c| crate::persistence::projects::get(c, id))
+                    .map_err(|_| invalid("That project no longer exists."))?,
+            ),
+            None => None,
+        };
+        let target = match &existing {
+            Some(p) => PathBuf::from(&p.root_path),
+            None => {
+                if req.name.trim().is_empty() {
+                    return Err(invalid("Enter a project name."));
+                }
+                projects::project_dir(&req.folder, &self.paths)?
+            }
+        };
         if target.is_file() {
             return Err(invalid("That path is a file, not a folder."));
+        }
+        if existing.is_some() && !target.is_dir() {
+            return Err(invalid(format!(
+                "The project's folder {} no longer exists.",
+                target.display()
+            )));
         }
         if target.is_dir()
             && std::fs::read_dir(&target)
@@ -342,6 +474,13 @@ impl AppsService {
                 app.label()
             )));
         }
+        // The app is built next to Devluma's data and moved in with one rename.
+        if !same_volume(&target, &self.paths.staging) {
+            return Err(invalid(format!(
+                "Apps can only be installed into folders on the same drive as {}.",
+                self.paths.root.display()
+            )));
+        }
         if self.tasks.busy(&target.display().to_string()) {
             return Err(invalid(
                 "A project is already being created in that folder.",
@@ -349,7 +488,7 @@ impl AppsService {
         }
         let php = self
             .db
-            .read(|c| runtime::effective(c, None, "php"))?
+            .read(|c| runtime::effective(c, req.project_id.as_deref(), "php"))?
             .ok_or_else(|| {
                 invalid(format!(
                     "{} needs PHP. Install a PHP version and make it the default on the Runtimes & Packages page.",
@@ -359,37 +498,65 @@ impl AppsService {
         let (min_major, min_minor) = app.min_php();
         if php_minor(&php.version) < (min_major, min_minor) {
             return Err(invalid(format!(
-                "{} needs PHP {min_major}.{min_minor} or newer; the default is PHP {}.",
+                "{} needs PHP {min_major}.{min_minor} or newer; this project uses PHP {}.",
                 app.label(),
                 php.version
             )));
         }
 
-        // Downloads: the app's package when none is installed.
+        // The chosen release. WordPress is downloaded into this project only (never
+        // installed as a package); Composer apps name a release line for create-project.
+        let requested = req
+            .version
+            .as_deref()
+            .map(str::trim)
+            .filter(|v| !v.is_empty());
+        let mut composer_version = None;
+        let mut wordpress = None;
         let mut downloads = Vec::new();
-        let installed = self
-            .db
-            .read(|c| composer::newest_installed(c, app.package_id()))?;
-        if installed.is_none() {
-            let v = current_version(&self.catalog, app.package_id()).ok_or_else(|| {
-                invalid(format!(
-                    "This catalog doesn't offer {} for this computer.",
-                    app.package_id()
-                ))
+        if app == App::Wordpress {
+            let v = match requested {
+                Some(v) => self.catalog.package("wordpress").and_then(|p| {
+                    p.versions
+                        .iter()
+                        .find(|x| x.version == v && x.superseded_by.is_none())
+                }),
+                None => current_version(&self.catalog, "wordpress"),
+            }
+            .ok_or_else(|| {
+                invalid(match requested {
+                    Some(v) => format!("WordPress {v} isn't offered."),
+                    None => "This catalog doesn't offer WordPress.".into(),
+                })
             })?;
-            let name = self
-                .catalog
-                .package(app.package_id())
-                .map_or(app.package_id(), |p| p.manifest.display_name.as_str());
-            downloads.push(Download {
-                package_id: app.package_id().to_owned(),
-                version: v.clone(),
-                label: format!(
-                    "{name} {} ({} MB)",
-                    v.version,
-                    v.source.size_bytes.div_ceil(1_048_576)
-                ),
-            });
+            wordpress = Some(v.clone());
+        } else {
+            if let Some(v) = requested {
+                if !valid_line(v) {
+                    return Err(invalid(format!(
+                        "\"{v}\" isn't a release line such as 13.* or 7.4.*."
+                    )));
+                }
+                composer_version = Some(v.to_owned());
+            }
+            // Composer is a shared tool: installed once, when it's missing.
+            if self
+                .db
+                .read(|c| composer::newest_installed(c, composer::PACKAGE_ID))?
+                .is_none()
+            {
+                let v = current_version(&self.catalog, composer::PACKAGE_ID)
+                    .ok_or_else(|| invalid("This catalog doesn't offer Composer."))?;
+                downloads.push(Download {
+                    package_id: composer::PACKAGE_ID.to_owned(),
+                    version: v.clone(),
+                    label: format!(
+                        "Composer {} ({} MB)",
+                        v.version,
+                        v.source.size_bytes.div_ceil(1_048_576)
+                    ),
+                });
+            }
         }
 
         let enable_extensions = composer::missing_extensions(
@@ -414,7 +581,7 @@ impl AppsService {
                         svc.instance_name
                     )));
                 }
-                let name = database_name(&req.folder);
+                let name = database_name(&target.display().to_string());
                 let existing = self
                     .databases
                     .databases(id)
@@ -452,6 +619,9 @@ impl AppsService {
             downloads,
             enable_extensions,
             database,
+            existing,
+            composer_version,
+            wordpress,
         })
     }
 
@@ -469,19 +639,31 @@ impl AppsService {
                 r.php.version
             ));
         }
-        steps.push(match app.composer_package() {
-            Some(pkg) => format!(
-                "Run composer create-project {pkg} with PHP {} (downloads the app's packages from packagist.org and runs its setup scripts).",
+        steps.push(match (app.composer_package(), &r.wordpress) {
+            (Some(pkg), _) => format!(
+                "Run composer create-project {pkg}{} with PHP {} (downloads the app's packages from packagist.org and runs its setup scripts).",
+                r.composer_version
+                    .as_deref()
+                    .map(|v| format!(" {v}"))
+                    .unwrap_or_default(),
                 r.php.version
             ),
-            None => "Copy WordPress into the project folder.".into(),
+            (None, Some(v)) => format!(
+                "Download WordPress {} ({} MB) from wordpress.org, check its SHA-256 and unpack it into the project folder only.",
+                v.version,
+                v.source.size_bytes.div_ceil(1_048_576)
+            ),
+            (None, None) => "Unpack WordPress into the project folder.".into(),
         });
         if let Some((_, name, _)) = &r.database {
             steps.push(format!(
                 "Create the database {name} and write wp-config.php (root, no password, new keys)."
             ));
         }
-        steps.push(format!("Add the project at {}.", r.target.display()));
+        steps.push(match &r.existing {
+            Some(p) => format!("Install it into {} ({}).", p.name, r.target.display()),
+            None => format!("Add the project at {}.", r.target.display()),
+        });
         if let Some(site) = &r.req.site {
             steps.push(format!(
                 "Create the site {} (Windows may ask for permission to add it to the hosts file).",
@@ -493,11 +675,104 @@ impl AppsService {
             label: app.label().into(),
             target_path: r.target.display().to_string(),
             php_version: Some(r.php.version.clone()),
-            downloads: r.downloads.iter().map(|d| d.label.clone()).collect(),
+            downloads: r
+                .downloads
+                .iter()
+                .map(|d| d.label.clone())
+                .chain(r.wordpress.iter().map(|v| {
+                    format!(
+                        "WordPress {} ({} MB)",
+                        v.version,
+                        v.source.size_bytes.div_ceil(1_048_576)
+                    )
+                }))
+                .collect(),
             enable_extensions: r.enable_extensions.clone(),
             database_name: r.database.as_ref().map(|d| d.1.clone()),
             steps,
             blocked: None,
+        }
+    }
+
+    /// The PHP a project (or a new project: the default) uses, as (major, minor).
+    pub fn php_for(&self, project_id: Option<&str>) -> Option<(u64, u64)> {
+        self.db
+            .read(|c| runtime::effective(c, project_id, "php"))
+            .ok()
+            .flatten()
+            .map(|s| php_minor(&s.version))
+    }
+
+    /// Releases to choose from: WordPress from Devluma's catalog (pinned, reviewed), Laravel
+    /// and Symfony release lines from packagist.org. When packagist can't be reached, the
+    /// list is empty and Composer picks the newest release that fits the PHP version.
+    pub async fn versions(&self, app: App, php: Option<(u64, u64)>) -> AppVersions {
+        let php = php.unwrap_or((0, 0));
+        let (min_major, min_minor) = app.min_php();
+        let Some(pkg) = app.composer_package() else {
+            let versions = self
+                .catalog
+                .package("wordpress")
+                .map(|p| {
+                    let mut v: Vec<_> = p
+                        .versions
+                        .iter()
+                        .filter(|v| v.superseded_by.is_none() && v.architecture.runs_on_host())
+                        .collect();
+                    v.sort_by_key(|v| std::cmp::Reverse(composer::version_key(&v.version)));
+                    v.into_iter()
+                        .map(|v| AppVersion {
+                            value: v.version.clone(),
+                            label: format!("WordPress {}", v.version),
+                            latest: v.version.clone(),
+                            min_php: Some(format!("{min_major}.{min_minor}")),
+                            supported: php >= (min_major, min_minor),
+                        })
+                        .collect()
+                })
+                .unwrap_or_default();
+            return AppVersions {
+                app,
+                versions,
+                source: "Devluma's catalog (each release checked against its SHA-256)".into(),
+                unavailable: None,
+            };
+        };
+        let url = format!("https://repo.packagist.org/p2/{pkg}.json");
+        let fetched = async {
+            let client = reqwest::Client::builder()
+                .timeout(Duration::from_secs(10))
+                .user_agent(concat!("Devluma/", env!("CARGO_PKG_VERSION")))
+                .build()
+                .map_err(|e| e.to_string())?;
+            let resp = client.get(&url).send().await.map_err(|e| e.to_string())?;
+            if !resp.status().is_success() {
+                return Err(format!("packagist.org answered {}", resp.status()));
+            }
+            resp.text().await.map_err(|e| e.to_string())
+        }
+        .await;
+        match fetched {
+            Ok(json) => {
+                let versions = release_lines(&json, app, php, 5);
+                let unavailable = versions
+                    .is_empty()
+                    .then(|| "packagist.org didn't list any releases.".to_owned());
+                AppVersions {
+                    app,
+                    versions,
+                    source: "packagist.org".into(),
+                    unavailable,
+                }
+            }
+            Err(e) => AppVersions {
+                app,
+                versions: Vec::new(),
+                source: "packagist.org".into(),
+                unavailable: Some(format!(
+                    "Couldn't read the releases from packagist.org ({e}). Composer will install the newest release that fits your PHP version."
+                )),
+            },
         }
     }
 
@@ -528,7 +803,7 @@ impl AppsService {
         req: &AppProjectRequest,
     ) -> Result<AppStarted, IpcError> {
         let r = self.resolve(req)?;
-        let project_id = new_id();
+        let project_id = r.existing.as_ref().map_or_else(new_id, |p| p.id.clone());
         let journal = Journal::new(&self.db, self.sink.as_ref());
         let op = journal.start(&NewOperation {
             operation_type: OPERATION_TYPE,
@@ -621,7 +896,117 @@ impl AppsService {
                 ));
             }
         }
+        if let Some(v) = &r.wordpress {
+            self.fetch_wordpress(ctx, op_id, v, cancel).await?;
+        }
         Ok(())
+    }
+
+    /// Downloads a WordPress release for this project only: into staging, checked against
+    /// the catalog's SHA-256, unpacked safely into `staging\<op>\app` and its version read
+    /// from `wp-includes/version.php`. Nothing is installed in `bin`.
+    async fn fetch_wordpress(
+        &self,
+        ctx: &InstallContext,
+        op_id: &str,
+        v: &VersionManifest,
+        cancel: &Arc<AtomicBool>,
+    ) -> Result<(), IpcError> {
+        let journal = Journal::new(&self.db, self.sink.as_ref());
+        let pkg = self
+            .catalog
+            .package("wordpress")
+            .ok_or_else(|| invalid("This catalog doesn't offer WordPress."))?;
+        let staging = self.paths.staging.join(op_id);
+        std::fs::create_dir_all(&staging)
+            .map_err(|_| failed(ErrorCode::Internal, "Couldn't prepare the staging folder."))?;
+        let archive_path = staging.join("wordpress.zip");
+        let label = format!("Downloading WordPress {}", v.version);
+        journal.progress(op_id, &label, None, None)?;
+        let token = tokio_util::sync::CancellationToken::new();
+        let mut last = std::time::Instant::now() - Duration::from_secs(1);
+        let download = super::download::download(
+            &v.source.url,
+            &pkg.manifest.allowed_hosts,
+            v.source.size_bytes,
+            &archive_path,
+            &ctx.download,
+            &token,
+            |received, total| {
+                if last.elapsed() >= Duration::from_millis(250) || received == total {
+                    last = std::time::Instant::now();
+                    let _ =
+                        journal.progress(op_id, &label, Some(received as i64), Some(total as i64));
+                }
+            },
+        );
+        tokio::pin!(download);
+        let downloaded = loop {
+            tokio::select! {
+                r = &mut download => break r,
+                () = tokio::time::sleep(Duration::from_millis(200)) => {
+                    if cancel.load(Ordering::SeqCst) {
+                        token.cancel();
+                    }
+                }
+            }
+        };
+        let downloaded = match downloaded {
+            Ok(d) => d,
+            Err(super::download::DownloadError::Cancelled) => return Err(invalid("Cancelled.")),
+            Err(e) => {
+                return Err(failed(
+                    ErrorCode::NetworkError,
+                    format!("Downloading WordPress failed: {e}."),
+                ));
+            }
+        };
+        journal.progress(op_id, "Checking WordPress's SHA-256", None, None)?;
+        if downloaded.sha256 != v.integrity.sha256 {
+            return Err(failed(
+                ErrorCode::IntegrityError,
+                format!(
+                    "Checksum mismatch: expected SHA-256 {}, got {}. The download was discarded.",
+                    v.integrity.sha256, downloaded.sha256
+                ),
+            ));
+        }
+        journal.progress(op_id, "Unpacking WordPress", None, None)?;
+        let app_dir = staging.join("app");
+        let limits = crate::security::archive::ExtractLimits::for_archive(
+            v.source.size_bytes,
+            v.source.strip_components,
+        );
+        let (zip, dest, flag) = (archive_path.clone(), app_dir.clone(), Arc::clone(cancel));
+        tauri::async_runtime::spawn_blocking(move || {
+            crate::security::archive::extract_zip(&zip, &dest, limits, &flag)
+        })
+        .await
+        .map_err(|_| IpcError::internal())?
+        .map_err(|e| match e {
+            crate::security::archive::ExtractError::Cancelled => invalid("Cancelled."),
+            other => failed(
+                ErrorCode::IntegrityError,
+                format!("The WordPress archive was rejected: {other}."),
+            ),
+        })?;
+        let _ = std::fs::remove_file(&archive_path);
+        let text =
+            std::fs::read_to_string(app_dir.join(r"wp-includes\version.php")).unwrap_or_default();
+        let expected = v
+            .executables
+            .first()
+            .map_or(v.version.as_str(), |e| e.expected_version.as_str());
+        match AdapterId::Wordpress.parse_version(&text) {
+            Some(found) if found == expected => Ok(()),
+            found => Err(failed(
+                ErrorCode::IntegrityError,
+                format!(
+                    "The download says it's WordPress {}, expected {expected}.",
+                    found.as_deref().unwrap_or("(unknown)")
+                ),
+            )),
+        }
     }
 
     fn build(
@@ -673,36 +1058,43 @@ impl AppsService {
         let app_dir = staging.join("app");
         std::fs::create_dir_all(&staging)
             .map_err(|_| failed(ErrorCode::Internal, "Couldn't prepare the staging folder."))?;
-        let package = self
-            .db
-            .read(|c| composer::newest_installed(c, app.package_id()))?
-            .ok_or_else(|| invalid(format!("{} isn't installed.", app.package_id())))?;
         match app.composer_package() {
+            // Already downloaded and unpacked into staging by `fetch_wordpress`.
             None => {
-                journal.progress(op_id, "Copying WordPress", None, None)?;
-                copy_tree(Path::new(&package.install_path), &app_dir, cancel).map_err(|_| {
-                    if cancel.load(Ordering::SeqCst) {
-                        invalid("Cancelled.")
-                    } else {
-                        failed(ErrorCode::Internal, "Couldn't copy WordPress.")
-                    }
-                })?;
+                if !app_dir.join("wp-load.php").is_file() {
+                    return Err(failed(
+                        ErrorCode::Internal,
+                        "WordPress wasn't unpacked; nothing was added.",
+                    ));
+                }
             }
             Some(pkg) => {
-                journal.progress(op_id, &format!("composer create-project {pkg}"), None, None)?;
+                let package = self
+                    .db
+                    .read(|c| composer::newest_installed(c, composer::PACKAGE_ID))?
+                    .ok_or_else(|| invalid("Composer isn't installed."))?;
+                journal.progress(
+                    op_id,
+                    format!(
+                        "composer create-project {pkg} {}",
+                        r.composer_version.as_deref().unwrap_or("")
+                    )
+                    .trim_end(),
+                    None,
+                    None,
+                )?;
+                let mut args: Vec<std::ffi::OsString> =
+                    vec!["create-project".into(), pkg.into(), "app".into()];
+                if let Some(v) = &r.composer_version {
+                    args.push(v.into());
+                }
+                args.extend(["--prefer-dist", "--no-interaction", "--no-ansi"].map(Into::into));
                 let log = composer::log_path(&self.paths, op_id);
                 let result = composer::run(
                     composer::Run {
                         php_exe: &Path::new(&r.php.install_path).join("php.exe"),
                         phar: &Path::new(&package.install_path).join(composer::PHAR),
-                        args: vec![
-                            "create-project".into(),
-                            pkg.into(),
-                            "app".into(),
-                            "--prefer-dist".into(),
-                            "--no-interaction".into(),
-                            "--no-ansi".into(),
-                        ],
+                        args,
                         cwd: &staging,
                         log: &log,
                         timeout: Duration::from_secs(30 * 60),
@@ -786,14 +1178,31 @@ impl AppsService {
         {
             service_ids.push(id.clone());
         }
-        let project = match projects::create_as(
-            &self.db,
-            &self.paths,
-            project_id,
-            &r.req.name,
-            &r.req.folder,
-            &service_ids,
-        ) {
+        let registered = match &r.existing {
+            // An existing project keeps its services; the new database is added to them.
+            Some(p) => self
+                .db
+                .write(|c| {
+                    let mut ids = crate::persistence::projects::service_ids(c, &p.id)?;
+                    for id in &service_ids {
+                        if !ids.contains(id) {
+                            ids.push(id.clone());
+                        }
+                    }
+                    crate::persistence::projects::set_service_ids(c, &p.id, &ids)?;
+                    crate::persistence::projects::get(c, &p.id)
+                })
+                .map_err(IpcError::from),
+            None => projects::create_as(
+                &self.db,
+                &self.paths,
+                project_id,
+                &r.req.name,
+                &r.req.folder,
+                &service_ids,
+            ),
+        };
+        let project = match registered {
             Ok(p) => p,
             Err(e) => {
                 // Put the folder back into staging (removed with it) and the empty one back.
@@ -935,20 +1344,98 @@ $table_prefix = 'wp_';\n";
         assert!(apps.iter().all(|a| a.needs_composer != a.uses_database));
     }
 
+    /// Shaped like packagist.org's p2 files (Composer 2 "minified": `require` carries over).
+    const LARAVEL_P2: &str = r#"{"minified":"composer/2.0","packages":{"laravel/laravel":[
+        {"version":"v13.11.0","version_normalized":"13.11.0.0","require":{"php":"^8.3","laravel/framework":"^13.17"}},
+        {"version":"v13.10.1","version_normalized":"13.10.1.0"},
+        {"version":"v12.9.0","version_normalized":"12.9.0.0","require":{"php":"^8.2"}},
+        {"version":"v12.0.0-beta1","version_normalized":"12.0.0.0-beta1"},
+        {"version":"v11.6.1","version_normalized":"11.6.1.0"},
+        {"version":"v10.3.3","version_normalized":"10.3.3.0","require":{"php":"^8.1"}}
+    ]}}"#;
+    const SYMFONY_P2: &str = r#"{"minified":"composer/2.0","packages":{"symfony/skeleton":[
+        {"version":"v8.1.99","version_normalized":"8.1.99.0","require":{"php":">=8.4","ext-ctype":"*"}},
+        {"version":"v8.0.99","version_normalized":"8.0.99.0"},
+        {"version":"v7.4.99","version_normalized":"7.4.99.0","require":{"php":">=8.2"}},
+        {"version":"v7.3.99","version_normalized":"7.3.99.0"},
+        {"version":"v6.4.99","version_normalized":"6.4.99.0","require":{"php":">=8.1"}}
+    ]}}"#;
+
     #[test]
-    fn copy_tree_copies_files_and_folders_and_stops_when_cancelled() {
-        let src = tempfile::tempdir().unwrap();
-        std::fs::create_dir_all(src.path().join(r"wp-content\themes")).unwrap();
-        std::fs::write(src.path().join("index.php"), "x").unwrap();
-        std::fs::write(src.path().join(r"wp-content\themes\a.php"), "y").unwrap();
-        let out = tempfile::tempdir().unwrap();
-        let dest = out.path().join("app");
-        copy_tree(src.path(), &dest, &AtomicBool::new(false)).unwrap();
+    fn release_lines_come_from_packagist_with_their_php_needs() {
+        let lines = release_lines(LARAVEL_P2, App::Laravel, (8, 2), 3);
+        let summary: Vec<_> = lines
+            .iter()
+            .map(|l| {
+                (
+                    l.value.as_str(),
+                    l.latest.as_str(),
+                    l.min_php.as_deref(),
+                    l.supported,
+                )
+            })
+            .collect();
         assert_eq!(
-            std::fs::read_to_string(dest.join(r"wp-content\themes\a.php")).unwrap(),
-            "y"
+            summary,
+            [
+                ("13.*", "13.11.0", Some("8.3"), false),
+                ("12.*", "12.9.0", Some("8.2"), true),
+                // Inherits ^8.2 from the entry before it (minified); the beta is skipped.
+                ("11.*", "11.6.1", Some("8.2"), true),
+            ]
         );
-        assert!(copy_tree(src.path(), &out.path().join("b"), &AtomicBool::new(true)).is_err());
+        assert_eq!(lines[0].label, "Laravel 13.x");
+
+        let lines = release_lines(SYMFONY_P2, App::Symfony, (8, 4), 10);
+        let labels: Vec<_> = lines.iter().map(|l| l.label.as_str()).collect();
+        assert_eq!(
+            labels,
+            [
+                "Symfony 8.1",
+                "Symfony 8.0",
+                "Symfony 7.4 LTS",
+                "Symfony 7.3",
+                "Symfony 6.4 LTS"
+            ]
+        );
+        assert_eq!(lines[2].value, "7.4.*");
+        assert!(lines.iter().all(|l| l.supported));
+        assert!(release_lines("not json", App::Laravel, (8, 4), 3).is_empty());
+        assert!(release_lines(LARAVEL_P2, App::Wordpress, (8, 4), 3).is_empty());
+    }
+
+    #[test]
+    fn php_constraints_and_release_lines_are_checked() {
+        assert_eq!(min_php_of("^8.3"), Some((8, 3)));
+        assert_eq!(min_php_of(">=8.4"), Some((8, 4)));
+        assert_eq!(min_php_of("^8.3|^8.2"), Some((8, 2)));
+        assert_eq!(min_php_of("*"), None);
+        for ok in ["13.*", "7.4.*"] {
+            assert!(valid_line(ok), "{ok}");
+        }
+        // Passed to Composer as an argument: only plain release lines, never options.
+        for bad in [
+            "13",
+            "^13.0",
+            "--dev",
+            "13.* --no-scripts",
+            "dev-master",
+            "",
+        ] {
+            assert!(!valid_line(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn apps_install_only_on_the_drive_of_the_staging_folder() {
+        assert!(same_volume(
+            Path::new(r"D:\Devluma\www\a"),
+            Path::new(r"d:\Devluma\staging")
+        ));
+        assert!(!same_volume(
+            Path::new(r"E:\code\a"),
+            Path::new(r"D:\Devluma\staging")
+        ));
     }
 
     /// Real PHP, Nginx and MariaDB; Composer and WordPress downloaded by the app installer
@@ -1114,6 +1601,8 @@ $table_prefix = 'wp_';\n";
             service_ids: vec![],
             site: site("api.test"),
             database_service_id: None,
+            version: Some("12.*".into()),
+            project_id: None,
         };
         let plan = apps.preview(&req);
         assert_eq!(plan.blocked, None);
@@ -1138,6 +1627,23 @@ $table_prefix = 'wp_';\n";
         );
         let api = env.paths.www.join("api");
         assert!(api.join("artisan").is_file() && api.join(r"vendor\autoload.php").is_file());
+        // The chosen release line, not the newest.
+        let lock: serde_json::Value =
+            serde_json::from_str(&std::fs::read_to_string(api.join("composer.lock")).unwrap())
+                .unwrap();
+        let framework = lock["packages"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .find(|p| p["name"] == "laravel/framework")
+            .unwrap()["version"]
+            .as_str()
+            .unwrap()
+            .to_owned();
+        assert!(
+            framework.starts_with("v12."),
+            "Laravel 12.x, got {framework}"
+        );
         let dotenv = std::fs::read_to_string(api.join(".env")).unwrap();
         assert!(
             dotenv.lines().any(|l| l.starts_with("APP_KEY=base64:")),
@@ -1175,6 +1681,8 @@ $table_prefix = 'wp_';\n";
             service_ids: vec![],
             site: site("shop.test"),
             database_service_id: None,
+            version: None,
+            project_id: None,
         };
         assert!(apps.preview(&req).downloads.is_empty());
         let started = apps.start(ctx.clone(), &req).unwrap();
@@ -1200,13 +1708,15 @@ $table_prefix = 'wp_';\n";
             service_ids: vec![],
             site: site("news.test"),
             database_service_id: Some(maria.clone()),
+            version: Some("7.0.8".into()),
+            project_id: None,
         };
         let plan = apps.preview(&req);
         assert_eq!(plan.database_name.as_deref(), Some("news"));
         assert!(
             plan.downloads
                 .iter()
-                .any(|d| d.starts_with("WordPress 7.1.4")),
+                .any(|d| d.starts_with("WordPress 7.0.8")),
             "{plan:?}"
         );
         let started = apps.start(ctx.clone(), &req).unwrap();
@@ -1216,6 +1726,13 @@ $table_prefix = 'wp_';\n";
             OperationStatus::Succeeded,
             "{:?}",
             op.safe_error_message
+        );
+        // Downloaded into the project only: nothing installed in bin.
+        assert!(!env.paths.packages.join("wordpress").exists());
+        assert!(
+            std::fs::read_to_string(env.paths.www.join(r"news\wp-includes\version.php"))
+                .unwrap()
+                .contains("$wp_version = '7.0.8';")
         );
         let wp_config = std::fs::read_to_string(env.paths.www.join(r"news\wp-config.php")).unwrap();
         assert!(wp_config.contains("define( 'DB_NAME', 'news' );"));

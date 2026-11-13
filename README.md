@@ -51,9 +51,11 @@ config change is **validated and reversible**, and services only ever listen on 
 - **pnpm and Yarn** for Node.js, added through Node's own Corepack with one checkbox.
 
 ### One-click apps
-- **New project from WordPress, Laravel or Symfony**: WordPress is copied from the verified
-  release and gets its own MariaDB database and `wp-config.php`; Laravel and Symfony come from
-  `composer create-project`. You see every step first and can cancel at any time.
+- **Web installer for WordPress, Laravel and Symfony**, right on the Projects page: pick the
+  version (WordPress releases checked against their SHA-256; Laravel and Symfony release lines
+  with the PHP they need), and it's installed into that project only. WordPress gets its own
+  MariaDB database and `wp-config.php`; Laravel and Symfony come from `composer create-project`.
+  You see every step first and can cancel at any time.
 - **Every new project gets its website** (`myapp.test`, optionally with HTTPS) as it's created.
 
 ### Web servers and databases
@@ -126,8 +128,8 @@ Get the latest version from the **[Releases page](https://github.com/capripio/de
 2. Open **Runtimes & Packages** and install PHP, a web server (Nginx, Apache or Caddy) and a
    database, plus Node.js or Python if you need them.
 3. Open **Services**, add the web server and database, and start them.
-4. Under **Projects**, choose **Add project**: start from an empty folder, WordPress, Laravel or
-   Symfony. Its site (such as `myapp.test`) is created with it.
+4. Under **Projects**, choose **Add project** for a folder, or **Install web app** for WordPress,
+   Laravel or Symfony. The site (such as `myapp.test`) is created with it.
 5. Optionally create a certificate under **SSL Certificates** and enable HTTPS for the site.
 
 ## Build from source

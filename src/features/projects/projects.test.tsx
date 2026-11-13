@@ -283,7 +283,7 @@ describe("projects", () => {
     expect(screen.queryByRole("form", { name: "Add site" })).not.toBeInTheDocument();
   });
 
-  it("creates a WordPress project with its database, showing the plan and progress", async () => {
+  it("installs WordPress from the web installer with a chosen version, its database and progress", async () => {
     const added = project({ id: "p9", name: "News", rootPath: String.raw`C:\Devluma\www\news` });
     let projects: unknown[] = [];
     const mock = createMockAdapter({
@@ -300,18 +300,38 @@ describe("projects", () => {
           observedState: "running",
         }),
       ],
+      list_app_versions: (args) =>
+        args?.app === "wordpress"
+          ? {
+              app: "wordpress",
+              versions: [
+                { value: "7.1.4", label: "WordPress 7.1.4", latest: "7.1.4", minPhp: "7.4", supported: true },
+                { value: "7.0.8", label: "WordPress 7.0.8", latest: "7.0.8", minPhp: "7.4", supported: true },
+              ],
+              source: "Devluma's catalog (each release checked against its SHA-256)",
+              unavailable: null,
+            }
+          : {
+              app: "laravel",
+              versions: [
+                { value: "13.*", label: "Laravel 13.x", latest: "13.11.0", minPhp: "8.3", supported: false },
+                { value: "12.*", label: "Laravel 12.x", latest: "12.9.0", minPhp: "8.2", supported: true },
+              ],
+              source: "packagist.org",
+              unavailable: null,
+            },
       preview_app_project: (args) => {
-        const req = args?.request as { folder: string };
+        const req = args?.request as { folder: string; version: string };
         return {
           app: "wordpress",
           label: "WordPress",
           targetPath: String.raw`C:\Devluma\www\\` + req.folder,
           phpVersion: "8.4.27",
-          downloads: ["WordPress 7.1.4 (36 MB)"],
+          downloads: [`WordPress ${req.version} (30 MB)`],
           enableExtensions: ["mysqli"],
           databaseName: "news",
           steps: [
-            "Download and verify WordPress 7.1.4 (36 MB).",
+            `Download WordPress ${req.version} (30 MB) from wordpress.org, check its SHA-256 and unpack it into the project folder only.`,
             "Create the database news and write wp-config.php.",
           ],
           blocked: null,
@@ -319,16 +339,31 @@ describe("projects", () => {
       },
       create_app_project: () => ({ operationId: "op-app", projectId: "p9" }),
     });
-    await renderApp("/projects", mock);
-    await userEvent.click((await screen.findAllByRole("button", { name: "Add project" }))[0]!);
-    const form = screen.getByRole("form", { name: "Add project" });
-    await userEvent.click(within(form).getByRole("radio", { name: /^WordPress/ }));
+    const { container } = await renderApp("/projects", mock);
+    // A separate action from "Add project", which only adds a folder.
+    await userEvent.click((await screen.findAllByRole("button", { name: "Install web app" }))[0]!);
+    const form = screen.getByRole("form", { name: "Install a web app" });
+    expect(screen.queryByRole("form", { name: "Add project" })).not.toBeInTheDocument();
+
+    // Versions: newest first; Laravel lines this PHP can't run are disabled, and the
+    // newest supported one is preselected.
+    await userEvent.click(within(form).getByRole("radio", { name: "Laravel" }));
+    const laravel = await within(form).findByLabelText("Version");
+    expect(laravel).toHaveValue("12.*");
+    expect(
+      within(laravel).getByRole("option", { name: /Laravel 13\.x \(13\.11\.0\) — needs PHP 8\.3/ }),
+    ).toBeDisabled();
+    expect(within(form).getByText(/Releases from packagist\.org/)).toBeInTheDocument();
+
+    await userEvent.click(within(form).getByRole("radio", { name: "WordPress" }));
+    const version = await within(form).findByLabelText("Version");
+    expect(version).toHaveValue("7.1.4");
+    await userEvent.selectOptions(version, "7.0.8");
     await userEvent.type(within(form).getByLabelText("Name"), "News");
     expect(within(form).getByLabelText("Database")).toHaveValue("m1");
-    expect(
-      await within(form).findByText("Create the database news and write wp-config.php."),
-    ).toBeInTheDocument();
-    await userEvent.click(within(form).getByRole("button", { name: "Create WordPress project" }));
+    expect(await within(form).findByText(/Download WordPress 7\.0\.8/)).toBeInTheDocument();
+    expect(await axeViolations(container)).toEqual([]);
+    await userEvent.click(within(form).getByRole("button", { name: "Install WordPress" }));
 
     await waitFor(() =>
       expect(mock.calls.find((c) => c.command === "create_app_project")?.args).toEqual({
@@ -339,6 +374,7 @@ describe("projects", () => {
           serviceIds: ["w1", "m1"],
           site: { domain: "news.test", webServerServiceId: "w1", https: false },
           databaseServiceId: "m1",
+          version: "7.0.8",
         },
       }),
     );
@@ -349,10 +385,14 @@ describe("projects", () => {
       startedAt: "2026-11-13T10:00:00.000Z",
     };
     act(() =>
-      mock.emit("operation://progress", { ...progress, status: "running", phase: "Copying WordPress" }),
+      mock.emit("operation://progress", {
+        ...progress,
+        status: "running",
+        phase: "Downloading WordPress 7.0.8",
+      }),
     );
-    expect(await within(form).findByText("Copying WordPress")).toBeInTheDocument();
-    expect(within(form).getByRole("button", { name: "Cancel creating the project" })).toBeInTheDocument();
+    expect(await within(form).findByText("Downloading WordPress 7.0.8")).toBeInTheDocument();
+    expect(within(form).getByRole("button", { name: "Cancel installing the app" })).toBeInTheDocument();
     projects = [added];
     act(() => mock.emit("operation://progress", { ...progress, status: "succeeded" }));
     expect(await screen.findByRole("heading", { name: "News" })).toBeInTheDocument();
@@ -361,6 +401,12 @@ describe("projects", () => {
   it("explains why an app can't be installed and keeps the button disabled", async () => {
     const mock = createMockAdapter({
       ...defaultHandlers,
+      list_app_versions: () => ({
+        app: "laravel",
+        versions: [],
+        source: "packagist.org",
+        unavailable: "Couldn't read the releases from packagist.org (timed out).",
+      }),
       preview_app_project: () => ({
         app: "laravel",
         label: "Laravel",
@@ -375,12 +421,72 @@ describe("projects", () => {
       }),
     });
     await renderApp("/projects", mock);
-    await userEvent.click((await screen.findAllByRole("button", { name: "Add project" }))[0]!);
-    const form = screen.getByRole("form", { name: "Add project" });
-    await userEvent.click(within(form).getByRole("radio", { name: /^Laravel/ }));
+    await userEvent.click((await screen.findAllByRole("button", { name: "Install web app" }))[0]!);
+    const form = screen.getByRole("form", { name: "Install a web app" });
+    await userEvent.click(within(form).getByRole("radio", { name: "Laravel" }));
+    // No list: said plainly, and the newest compatible release is used.
+    expect(await within(form).findByText(/Couldn't read the releases/)).toBeInTheDocument();
     await userEvent.type(within(form).getByLabelText("Name"), "Api");
     expect(await within(form).findByRole("alert")).toHaveTextContent("Laravel needs PHP");
-    expect(within(form).getByRole("button", { name: "Create Laravel project" })).toBeDisabled();
+    expect(within(form).getByRole("button", { name: "Install Laravel" })).toBeDisabled();
+  });
+
+  it("offers to install a web app into a project whose folder is empty", async () => {
+    const empty = project({
+      detection: {
+        kind: null,
+        label: "Unknown",
+        suggestedDocumentRoot: String.raw`D:\code\shop`,
+        virtualEnvScripts: null,
+        empty: true,
+      },
+    });
+    const mock = createMockAdapter({
+      ...defaultHandlers,
+      list_projects: () => [empty],
+      list_app_versions: () => ({
+        app: "wordpress",
+        versions: [
+          { value: "7.1.4", label: "WordPress 7.1.4", latest: "7.1.4", minPhp: "7.4", supported: true },
+        ],
+        source: "Devluma's catalog",
+        unavailable: null,
+      }),
+      preview_app_project: () => ({
+        app: "wordpress",
+        label: "WordPress",
+        targetPath: String.raw`D:\code\shop`,
+        phpVersion: "8.3.35",
+        downloads: [],
+        enableExtensions: [],
+        databaseName: null,
+        steps: ["Install it into Shop (D:\\code\\shop)."],
+        blocked: null,
+      }),
+      create_app_project: () => ({ operationId: "op-x", projectId: "p1" }),
+    });
+    await renderApp("/projects/p1", mock);
+    await userEvent.click(
+      await screen.findByRole("button", { name: "Install WordPress, Laravel or Symfony here" }),
+    );
+    const form = screen.getByRole("form", { name: "Install a web app" });
+    // The project is fixed: no name or folder to enter.
+    expect(within(form).queryByLabelText("Name")).not.toBeInTheDocument();
+    expect(within(form).getByText(/which is empty/)).toBeInTheDocument();
+    // Enabled once the plan is back.
+    await waitFor(() =>
+      expect(within(form).getByRole("button", { name: "Install WordPress" })).toBeEnabled(),
+    );
+    await userEvent.click(within(form).getByRole("button", { name: "Install WordPress" }));
+    await waitFor(() =>
+      expect(
+        (
+          mock.calls.find((c) => c.command === "create_app_project")?.args as {
+            request: Record<string, unknown>;
+          }
+        ).request,
+      ).toMatchObject({ projectId: "p1", app: "wordpress", version: "7.1.4", serviceIds: [] }),
+    );
   });
 
   it("runs Composer for a project and turns on missing PHP extensions first", async () => {
