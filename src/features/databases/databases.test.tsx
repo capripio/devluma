@@ -105,6 +105,75 @@ describe("databases", () => {
     );
   });
 
+  it("starts a stopped server from the restore dialog without losing the choices", async () => {
+    let state = "stopped";
+    const pgService = () => ({
+      id: "pg1",
+      packageInstallationId: "i-pg1",
+      instanceName: "pg",
+      serviceType: "database",
+      lifecycleAdapter: "postgresql",
+      desiredState: state,
+      observedState: state,
+      port: 5432,
+      bindAddress: "127.0.0.1",
+      configPath: null,
+      dataPath: null,
+      pid: null,
+      processStartedAt: null,
+      healthStatus: "unknown",
+      lastExitCode: null,
+      lastErrorCode: null,
+      jobName: null,
+      adminPort: null,
+      updatedAt: "2026-10-11T10:00:00.000Z",
+      role: "database",
+      packageId: "postgresql",
+      packageName: "PostgreSQL",
+      version: "18.6",
+      portConflicts: [],
+    });
+    const mock = createMockAdapter({
+      ...defaultHandlers,
+      list_database_services: () => [{ ...pg, observedState: state }],
+      list_services: () => [pgService()],
+      list_database_backups: () => [backup],
+      preview_restore: () =>
+        state === "running" ? plan(false) : { ...plan(false), effects: [], blocked: "Start pg first." },
+      start_service: () => ({ operationId: "op-start" }),
+    });
+    await renderApp("/databases", mock);
+    // The card offers Start too.
+    const card = await screen.findByRole("region", { name: /pg/ });
+    expect(await within(card).findByRole("button", { name: "Start pg" })).toBeInTheDocument();
+
+    await userEvent.click(await screen.findByRole("button", { name: /Restore backup from/ }));
+    const dialog = await screen.findByRole("dialog");
+    const target = within(dialog).getByLabelText("Into database");
+    await userEvent.clear(target);
+    await userEvent.type(target, "shop_copy");
+    expect(await within(dialog).findByText("Start pg first.")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Restore" })).toBeDisabled();
+
+    await userEvent.click(within(dialog).getByRole("button", { name: "Start pg" }));
+    await waitFor(() =>
+      expect(mock.calls.find((c) => c.command === "start_service")?.args).toEqual({ serviceId: "pg1" }),
+    );
+    state = "running";
+    mock.emit("service://state", {
+      serviceId: "pg1",
+      observedState: "running",
+      healthStatus: "healthy",
+      pid: 42,
+      lastExitCode: null,
+      lastErrorCode: null,
+    });
+    expect(await within(dialog).findByText(/A new database shop_copy is created/)).toBeInTheDocument();
+    expect(within(dialog).getByLabelText("Into database")).toHaveValue("shop_copy");
+    expect(within(dialog).queryByText("Start pg first.")).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Restore" })).toBeEnabled();
+  });
+
   it("restoring into a new database needs no overwrite confirmation", async () => {
     const mock = createMockAdapter({
       ...defaultHandlers,

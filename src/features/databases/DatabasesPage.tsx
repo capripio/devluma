@@ -11,9 +11,14 @@ import { ipc } from "../../lib/ipc";
 import { toAppError, type AppError } from "../../lib/ipc/errors";
 import { formatBytes } from "../../lib/format";
 import { useAsync } from "../../lib/useAsync";
-import type { BackupRecord, DatabaseServiceView } from "../../types/dto";
+import type { BackupRecord, DatabaseServiceView, ServiceView } from "../../types/dto";
 import { RestoreDialog } from "./RestoreDialog";
 import { LoadingState } from "../../components/LoadingState";
+import { ServiceActions } from "../services/ServiceActions";
+import { useServices } from "../services/useServices";
+
+/** Looks up the live service (state kept current by `service://state` events). */
+export type ServiceLookup = (serviceId: string) => ServiceView | undefined;
 
 const ENGINE_NAMES: Record<DatabaseServiceView["engine"], string> = {
   mariadb: "MariaDB",
@@ -24,6 +29,9 @@ const ENGINE_NAMES: Record<DatabaseServiceView["engine"], string> = {
 export function DatabasesPage() {
   const services = useAsync(ipc.listDatabaseServices);
   const backups = useAsync(ipc.listDatabaseBackups);
+  const live = useServices();
+  const serviceFor: ServiceLookup = (id) =>
+    live.status === "success" ? live.data.find((s) => s.id === id) : undefined;
   const refresh = () => {
     services.refresh();
     backups.refresh();
@@ -48,16 +56,33 @@ export function DatabasesPage() {
             description="Install MariaDB, PostgreSQL or MongoDB, then add it on the Services page. Existing data is never overwritten."
           />
         ) : (
-          services.data.map((d) => <DatabaseCard key={d.serviceId} db={d} onChanged={refresh} />)
+          services.data.map((d) => (
+            <DatabaseCard key={d.serviceId} db={d} service={serviceFor(d.serviceId)} onChanged={refresh} />
+          ))
         ))}
       {backups.status === "success" && services.status === "success" && (
-        <BackupsTable backups={backups.data} services={services.data} onChanged={refresh} />
+        <BackupsTable
+          backups={backups.data}
+          services={services.data}
+          serviceFor={serviceFor}
+          onChanged={refresh}
+        />
       )}
     </>
   );
 }
 
-function DatabaseCard({ db, onChanged }: { db: DatabaseServiceView; onChanged: () => void }) {
+function DatabaseCard({
+  db: listed,
+  service,
+  onChanged,
+}: {
+  db: DatabaseServiceView;
+  service: ServiceView | undefined;
+  onChanged: () => void;
+}) {
+  // The live state wins: it follows Start/Stop right away instead of after the next refresh.
+  const db = service ? { ...listed, observedState: service.observedState } : listed;
   const running = db.observedState === "running";
   const headingId = `db-${db.serviceId}`;
   const c = db.connection;
@@ -66,14 +91,17 @@ function DatabaseCard({ db, onChanged }: { db: DatabaseServiceView; onChanged: (
       aria-labelledby={headingId}
       className="flex flex-col gap-3 rounded-md border border-border p-4 text-sm"
     >
-      <h2 id={headingId} className="font-semibold">
-        <Link to={`/services/${db.serviceId}`} className="text-accent hover:underline">
-          {db.name}
-        </Link>{" "}
-        <span className="font-normal text-fg-muted">
-          {ENGINE_NAMES[db.engine]} {db.version} · {db.observedState}
-        </span>
-      </h2>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <h2 id={headingId} className="font-semibold">
+          <Link to={`/services/${db.serviceId}`} className="text-accent hover:underline">
+            {db.name}
+          </Link>{" "}
+          <span className="font-normal text-fg-muted">
+            {ENGINE_NAMES[db.engine]} {db.version} · {db.observedState}
+          </span>
+        </h2>
+        {service && <ServiceActions service={service} compact />}
+      </div>
       <dl className="grid grid-cols-[auto_1fr] gap-x-6 gap-y-1">
         {c && (
           <>
@@ -109,7 +137,8 @@ function DatabaseCard({ db, onChanged }: { db: DatabaseServiceView; onChanged: (
         </dd>
       </dl>
       {c && <p className="text-fg-muted">{c.credentialNote}</p>}
-      <BackupActions db={db} running={running} onChanged={onChanged} />
+      {/* Remounted when the server starts or stops, so the database list is read again. */}
+      <BackupActions key={String(running)} db={db} running={running} onChanged={onChanged} />
     </section>
   );
 }
@@ -211,10 +240,12 @@ function BackupActions({
 function BackupsTable({
   backups,
   services,
+  serviceFor,
   onChanged,
 }: {
   backups: BackupRecord[];
   services: DatabaseServiceView[];
+  serviceFor: ServiceLookup;
   onChanged: () => void;
 }) {
   const [restoring, setRestoring] = useState<BackupRecord | null>(null);
@@ -265,6 +296,7 @@ function BackupsTable({
         <RestoreDialog
           backup={restoring}
           services={services.filter((s) => s.engine === restoring.engine)}
+          serviceFor={serviceFor}
           onClose={() => setRestoring(null)}
           onRestored={onChanged}
         />

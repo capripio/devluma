@@ -4,6 +4,8 @@ import { ErrorPanel } from "../../components/ErrorPanel";
 import { ipc } from "../../lib/ipc";
 import { toAppError, type AppError } from "../../lib/ipc/errors";
 import type { BackupRecord, DatabaseServiceView, RestorePlan, RestoreRequest } from "../../types/dto";
+import { ServiceActions } from "../services/ServiceActions";
+import type { ServiceLookup } from "./DatabasesPage";
 
 /**
  * Restore with a preview from the backend: what is created or replaced, and the safety net.
@@ -12,11 +14,13 @@ import type { BackupRecord, DatabaseServiceView, RestorePlan, RestoreRequest } f
 export function RestoreDialog({
   backup,
   services,
+  serviceFor,
   onClose,
   onRestored,
 }: {
   backup: BackupRecord;
   services: DatabaseServiceView[];
+  serviceFor: ServiceLookup;
   onClose: () => void;
   onRestored: () => void;
 }) {
@@ -24,9 +28,15 @@ export function RestoreDialog({
     services.find((s) => s.serviceId === backup.serviceInstanceId)?.serviceId ?? services[0]?.serviceId ?? "",
   );
   const [target, setTarget] = useState(backup.databaseName ?? "");
-  // Previews and the overwrite confirmation belong to one set of inputs; changing an input
+  const service = serviceFor(serviceId);
+  const state = service?.observedState ?? services.find((s) => s.serviceId === serviceId)?.observedState;
+  // A database backup restores into a running server; a snapshot into a stopped one.
+  const wrongState =
+    backup.kind === "logical" ? state !== "running" : state !== "stopped" && state !== "failed";
+  // Previews and the overwrite confirmation belong to one set of inputs (the service's state
+  // included, so starting or stopping it from here re-checks the restore); changing an input
   // makes them stale (they're ignored until a fresh preview arrives).
-  const inputs = `${backup.id}|${serviceId}|${target.trim()}`;
+  const inputs = `${backup.id}|${serviceId}|${target.trim()}|${state ?? ""}`;
   const [preview, setPreview] = useState<{ inputs: string; plan?: RestorePlan; error?: AppError } | null>(
     null,
   );
@@ -104,6 +114,18 @@ export function RestoreDialog({
             </ul>
           )}
           {plan?.blocked && <p className="text-warning">{plan.blocked}</p>}
+          {service && wrongState && (plan?.blocked || state === "starting" || state === "stopping") && (
+            <div
+              role="group"
+              aria-label={`${service.instanceName} service`}
+              className="flex flex-wrap items-center gap-3 rounded-md bg-surface p-2"
+            >
+              <span>
+                {service.instanceName} is {state}.
+              </span>
+              <ServiceActions service={service} compact />
+            </div>
+          )}
           {plan?.overwrites && !plan.blocked && (
             <label className="flex items-start gap-2 font-medium">
               <input
